@@ -7,6 +7,7 @@ A collection of custom Claude Code commands and skills for enhanced productivity
 ```
 claude-skills/
 ├── commands/       # Slash commands (.md files)
+├── scripts/        # Supporting Python scripts
 ├── skills/         # Skill definitions
 └── examples/       # Example configurations
 ```
@@ -31,6 +32,7 @@ cp commands/*.md ~/.claude/commands/
 |---------|-------------|
 | `/screenshot` | View and analyze the most recent screenshot |
 | `/cleanup-figs` | Clean up old timestamped figure versions |
+| `/log` | Export current session to readable .log file |
 
 ### Git Workflow Commands
 
@@ -69,6 +71,9 @@ View and analyze the most recent screenshot from ~/Pictures/Screenshots/.
 
 ### `/cleanup-figs`
 Clean up old versions of timestamped figures using dry-run first for safety.
+
+### `/log`
+Export the current Claude Code session to a readable `.log` file. Creates a timestamped file with all user/assistant messages. Requires `scripts/export_session.py` to be installed at `~/.claude/commands/`.
 
 ### `/git-summary`
 Get a complete view of your repository including status, recent commits, branches, and stashes.
