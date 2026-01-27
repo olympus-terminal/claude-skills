@@ -68,7 +68,7 @@ cp commands/*.md ~/.claude/commands/
 
 | Command | Description |
 |---------|-------------|
-| `/jubail` | Load Jubail HPC best practices into the session |
+| `/hpc` | Load Jubail HPC best practices into the session |
 
 ## Command Details
 
@@ -126,7 +126,7 @@ Generate language-appropriate documentation (docstrings, JSDoc, etc.).
 ### `/deps-check`
 Check for outdated packages, security vulnerabilities, and dependency issues.
 
-### `/jubail`
+### `/hpc`
 Load NYU Abu Dhabi Jubail HPC best practices into the current session. Teaches Claude the `/scratch/drn2/` path conventions, SLURM template requirements, Python environment detection patterns, partition selection, and known pitfalls. Run this at the start of any HPC-related session.
 
 ## Contributing
