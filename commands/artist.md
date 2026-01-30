@@ -452,7 +452,151 @@ After EVERY figure is generated, perform ALL of these checks before reporting co
 
 ---
 
-## 10. FIGURE SIZE STANDARDS
+## 10. FLEXIBLE MULTI-ROW LAYOUTS
+
+Use nested GridSpec when different rows need different column structures:
+
+```python
+# Main grid with different height ratios per row
+gs = gridspec.GridSpec(4, 4, figure=fig,
+                       height_ratios=[1.2, 1, 1, 1.15],
+                       hspace=0.35, wspace=0.40)
+
+# Row 0: 2 panels (map + plot) with custom width ratios
+gs_row0 = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0, :],
+                                            width_ratios=[1.6, 1.0],
+                                            wspace=0.25)
+
+# Row 1: 3 wider panels
+gs_row1 = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[1, :],
+                                            width_ratios=[1, 1, 1],
+                                            wspace=0.35)
+
+# Access panels from nested GridSpec
+ax_a = fig.add_subplot(gs_row0[0], projection=ccrs.Robinson())
+ax_b = fig.add_subplot(gs_row0[1])
+ax_c = fig.add_subplot(gs_row1[0])
+```
+
+### Common Layout Recipes
+
+**Map + Training Curves (2 panels, top row):**
+- `width_ratios=[1.6, 1.0]` — map slightly wider
+
+**3 UMAP/Scatter Panels (middle row):**
+- `width_ratios=[1, 1, 1], wspace=0.35`
+
+**Counterfactual Row (map + bars + scatter):**
+- `width_ratios=[1.7, 0.15, 1.0, 0.9]` — wide map, spacer, two analysis panels
+
+---
+
+## 11. CARTOPY WORLD MAPS
+
+```python
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+
+ax = fig.add_subplot(gs[0, :], projection=ccrs.Robinson())
+
+# Light theme (publication-friendly)
+ax.set_facecolor('#f0f8ff')  # Alice blue ocean
+ax.add_feature(cfeature.LAND, facecolor='#e8e8e8', edgecolor='none')
+ax.add_feature(cfeature.COASTLINE, linewidth=0.2, edgecolor='#666666')
+for spine in ax.spines.values():
+    spine.set_visible(False)
+ax.set_global()
+
+# Plot points with transform
+ax.scatter(lon, lat, c=color, s=5, alpha=0.7,
+           transform=ccrs.PlateCarree(),
+           edgecolors='black', linewidths=0.1)
+```
+
+---
+
+## 12. PANEL LABELS
+
+```python
+# Option 1: As title (left-aligned) — simple, most common
+ax.set_title('A', loc='left', fontweight='bold', fontsize=8)
+
+# Option 2: As text annotation (for maps/complex panels with projections)
+ax.text(0.02, 0.98, 'A', transform=ax.transAxes,
+        fontsize=8, fontweight='bold', va='top', ha='left',
+        bbox=dict(boxstyle='round,pad=0.2', facecolor='white',
+                 edgecolor='none', alpha=0.8))
+```
+
+---
+
+## 13. COMPACT MULTI-PANEL COLORBARS & LEGENDS
+
+### Colorbars
+```python
+# Vertical (alongside scatter) — compact
+cbar = fig.colorbar(sc, ax=ax, fraction=0.04, pad=0.02, aspect=15)
+cbar.ax.tick_params(labelsize=6, width=0.25, length=1.5)
+cbar.outline.set_linewidth(0.25)
+
+# Horizontal (below heatmap)
+cbar = fig.colorbar(im, ax=ax, orientation='horizontal',
+                    fraction=0.06, pad=0.15, aspect=20)
+```
+
+### Compact Legends
+```python
+# Multi-column legend for maps (many categories)
+ax.legend(loc='lower left', frameon=True, facecolor='white', edgecolor='none',
+          fontsize=5, ncol=4, markerscale=0.8, handletextpad=0.2,
+          columnspacing=0.5, bbox_to_anchor=(0.0, -0.02))
+
+# Minimal legend for line plots
+from matplotlib.lines import Line2D
+leg_elements = [Line2D([0], [0], color='gray', lw=0.5, label='Train'),
+                Line2D([0], [0], color='gray', lw=0.5, ls='--', label='Val')]
+ax.legend(handles=leg_elements, loc='upper right', frameon=False, handlelength=1)
+```
+
+---
+
+## 14. RASTERIZATION FOR DENSE SCATTER
+
+Rasterize scatter plots with many points to reduce file size while keeping axes/text vector:
+
+```python
+ax.scatter(x, y, c=colors, s=2, alpha=0.6, rasterized=True)
+```
+
+---
+
+## 15. CATEGORICAL COLOR PALETTES
+
+### MODIS Ocean Basin Palette (colorblind-friendly)
+```python
+BASIN_COLORS = {
+    'Atlantic': '#1f77b4',      # Blue
+    'Pacific': '#d62728',       # Red
+    'Mediterranean': '#ff7f0e', # Orange
+    'Indian': '#2ca02c',        # Green
+    'Southern': '#9467bd',      # Purple
+    'Arctic': '#17becf',        # Cyan
+    'Red_Sea': '#e377c2'        # Pink
+}
+```
+
+### Model Comparison Palette
+```python
+MODEL_COLORS = {
+    '(a) Baseline': '#2166ac',  # Blue
+    '(b) Model A': '#b2182b',   # Red
+    '(c) Model B': '#1b7837'    # Green
+}
+```
+
+---
+
+## 16. FIGURE SIZE STANDARDS
 
 | Context | Width | Notes |
 |---|---|---|
