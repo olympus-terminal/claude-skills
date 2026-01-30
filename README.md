@@ -1,6 +1,6 @@
 # Claude Skills
 
-A collection of custom Claude Code commands and skills for enhanced productivity.
+A collection of custom Claude Code [Anthropic] commands and skills for enhanced productivity.
 
 ## Structure
 
