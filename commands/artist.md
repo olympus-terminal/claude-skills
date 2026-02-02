@@ -15,9 +15,11 @@ These apply to EVERY visualization regardless of whether it uses matplotlib, Tik
 ### Spatial Hierarchy
 - Padding between nested elements MUST decrease inward (outer margin > panel gap > label pad > tick pad)
 - Outer figure margins: handled by `bbox_inches='tight'`
-- Panel gaps: `hspace/wspace = 0.02`
+- **Aligned layouts** (heatmap + dendrogram + annotation tracks sharing axes): `hspace/wspace = 0.02`
+- **Heterogeneous multi-panel composites** (independent axes with their own labels, colorbars, legends): use **nested GridSpec** — outer grid rows with `hspace=0.30–0.40`, inner `GridSpecFromSubplotSpec` per row with `wspace=0.25–0.40`
 - Label pad: `1pt`
 - Tick pad: `1pt`
+- NEVER use flat `hspace/wspace=0.02` on multi-panel figures with independent axes — this WILL cause overlap
 
 ### Anti-Overlap Mandate
 - **NO text may touch any other element** — not other text, not axes, not data points, not borders, not colorbars
@@ -31,7 +33,8 @@ These apply to EVERY visualization regardless of whether it uses matplotlib, Tik
 | Text to text | 1pt |
 | Text to axis line | 1pt (via labelpad/tickpad) |
 | Text to data (bars, points) | 2pt |
-| Panel to panel | 0.02 in figure fraction |
+| Panel to panel (aligned layout) | 0.02 in figure fraction |
+| Panel to panel (heterogeneous) | 0.30–0.40 hspace via nested GridSpec |
 | Colorbar to heatmap | 0.008 width fraction gap |
 
 ### Data-to-Ink Ratio
@@ -42,7 +45,7 @@ These apply to EVERY visualization regardless of whether it uses matplotlib, Tik
 ### Visual Weight Balance
 - Distribute visual density evenly across the figure
 - A dendrogram on the left balances annotation tracks on the right
-- A colorbar should be compact (0.008 width fraction), never dominant
+- A colorbar should be compact and context-appropriate (see Section 5 Colorbar Recipes), never dominant
 
 ---
 
@@ -74,10 +77,17 @@ mpl.rcParams['legend.fontsize'] = 6
 - Document preamble: `\usepackage[scaled=0.9]{helvet}` with `\renewcommand*\familydefault{\sfdefault}`
 - Font sizing via `Scale=0.5` on a 12pt base document gives 6pt effective
 
+### Panel Labels and Titles
+- **Panel labels** (`A`, `B`, `C`, …) are the ONLY bold text in a figure — 6pt bold Arial
+- **NO panel titles** — titles belong in the figure caption/legend, not on the panel itself
+- Remove all `ax.set_title()` calls; describe panels in the caption instead
+- Panel label position: `ax.text(-0.12, 1.08, letter, transform=ax.transAxes, fontsize=6, fontweight='bold', va='top', ha='left')`
+
 ### Text Content Rules
 - **NO unicode subscripts** — write `Log2` not `Log₂`, write `CO2` not `CO₂`
 - Abbreviate aggressively in dense figures: `"2119"` instead of `"PF02119"`
 - Use sparse labeling: every Nth item when >20 items on an axis
+- **NO `fontweight='bold'`** anywhere except panel labels — axis labels, tick labels, annotations are all normal weight
 
 ---
 
@@ -259,7 +269,36 @@ gs = gridspec.GridSpec(1, 3, figure=fig,
 # Col 0: main panel, Col 1: gap, Col 2: statistics
 ```
 
+#### Heterogeneous multi-panel composite (e.g., 12+ independent panels):
+Use **nested GridSpec** — an outer grid for rows, inner grids per row for columns:
+```python
+fig = plt.figure(figsize=(7, 10))
+
+# Outer grid: one row per logical panel row
+outer = gridspec.GridSpec(4, 1, figure=fig,
+    height_ratios=[1, 1.1, 1.4, 1.0],
+    hspace=0.35)  # generous inter-row spacing
+
+# Row 0: 4 equal panels
+gs_row0 = gridspec.GridSpecFromSubplotSpec(1, 4,
+    subplot_spec=outer[0], wspace=0.30)
+
+# Row 2: heterogeneous widths (e.g., donut + compact heatmap + bar chart)
+gs_row2 = gridspec.GridSpecFromSubplotSpec(1, 3,
+    subplot_spec=outer[2],
+    width_ratios=[1.2, 0.55, 1.0],  # narrow column for heatmap
+    wspace=0.50)
+
+# Create axes from inner grids
+ax_a = fig.add_subplot(gs_row0[0, 0])
+ax_b = fig.add_subplot(gs_row0[0, 1])
+# ...
+```
+**When to use nested GridSpec**: any figure where rows contain different numbers of panels, or panels within a row need different widths, or panels have independent colorbars/legends. NEVER flatten these into a single large GridSpec — it forces uniform spacing everywhere.
+
 ### Heatmap Recipe
+
+**Aligned heatmaps** (biclustering with dendrograms — panel fills its GridSpec cell):
 ```python
 im = ax.imshow(data, aspect='auto', cmap=custom_cmap,
                interpolation='nearest')
@@ -270,12 +309,45 @@ for i in range(0, n_rows, 5):
     ax.axhline(i - 0.5, color='gray', lw=0.15, alpha=0.2)
 ```
 
-### Colorbar Recipe
+**Standalone heatmaps** (correlation matrix in a multi-panel figure — compact square cells):
+```python
+# Use aspect='equal' so cells are square, and constrain width via GridSpec
+# to make cells only as large as tick labels require
+im = ax.imshow(data, cmap=diverging_cmap, norm=norm, aspect='equal',
+               interpolation='nearest')
+ax.set_xticks(range(n))
+ax.set_xticklabels(labels, rotation=45, ha='right', rotation_mode='anchor')
+ax.set_yticks(range(n))
+ax.set_yticklabels(labels)
+```
+To control cell size, allocate a **narrow column** in the GridSpec `width_ratios`. Example: `width_ratios=[1.2, 0.55, 1.0]` where the middle column is the heatmap. The `aspect='equal'` + narrow allocation produces compact cells sized to their tick labels.
+
+### Colorbar Recipes
+
+Colorbar sizing depends on context. One size does NOT fit all.
+
+**Aligned heatmap** (colorbar is a thin strip under/beside a dominant heatmap):
 ```python
 cbar = fig.colorbar(im, ax=ax, fraction=0.008, pad=0.01, aspect=30)
 cbar.ax.tick_params(labelsize=6, width=0.25, length=2)
 cbar.outline.set_linewidth(0.25)
 ```
+
+**Standalone heatmap** (compact correlation matrix in multi-panel figure):
+```python
+cbar = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.03, aspect=20)
+cbar.ax.tick_params(labelsize=6, width=0.25, length=2)
+cbar.outline.set_linewidth(0.25)
+```
+
+**Scatter / hexbin panels** (colorbar beside a plot, needs visible size):
+```python
+cbar = plt.colorbar(mappable, ax=ax, shrink=0.6, pad=0.02)
+cbar.ax.tick_params(labelsize=6, width=0.25, length=2)
+cbar.outline.set_linewidth(0.25)
+```
+
+Use `fraction` when the colorbar should scale with the axes size (heatmaps). Use `shrink` when you want an absolute proportion of the axes height (scatter/hexbin).
 
 ### Dendrogram Recipe
 ```python
@@ -393,12 +465,25 @@ tectonic filename.tex
 - Top panels: aligned exactly to main heatmap columns
 - Shared axes ensure pixel-perfect alignment
 
+### Heterogeneous Multi-Panel Figure (e.g., Figure 5)
+```
+Row 0: [  UMAP-CC1  ] [  UMAP-CC2  ] [  UMAP-CC3  ] [  UMAP-CC4  ]
+Row 1: [  HexEnv1   ] [  HexEnv2   ] [  HexEnv3   ] [  HexEnv4   ]
+Row 2: [   Donut    ] [ Heatmap  ] [  Bar chart   ]
+Row 3: [  Lineage   ] [  Histogram ] [ Ridge plot  ]
+```
+- Use nested GridSpec: outer `GridSpec(4, 1)` with `hspace=0.35`, inner `GridSpecFromSubplotSpec` per row
+- Each row can have different numbers/sizes of panels via `width_ratios`
+- Panels own their colorbars, legends, and labels independently
+- figsize: ~7×10in for double-column, ~3.5×5in for single-column
+
 ### Space-Saving Techniques
 1. **Shared axes** — multiple panels use same x/y coordinates
 2. **Inline legends** — color bars AS data tracks, not separate boxes
 3. **Sparse labeling** — every 5th PFAM labeled
-4. **Compact colorbars** — 0.008 width fraction
+4. **Compact colorbars** — context-dependent (see Section 5 Colorbar Recipes)
 5. **Merged annotations** — taxa as colored bar, not text labels
+6. **Compact heatmap cells** — `aspect='equal'` + narrow GridSpec column, sized to tick labels
 
 ### TikZ Pipeline Layout
 - Main flow: top-to-bottom (stages connected by `mainArrow`)
@@ -446,157 +531,19 @@ After EVERY figure is generated, perform ALL of these checks before reporting co
 | TikZ default spacing | Used `node distance` without explicit override | Set spacing explicitly for every `below=`/`right=` |
 | Full-page PDF from TikZ | Missing `border=` in documentclass | Use `\documentclass[tikz,border=3pt]{standalone}` |
 | LaTeX float issues | Used `[H]` float specifier | Use `[!htb]` instead |
-| Colorbar dominates figure | Default colorbar size | `fraction=0.008, pad=0.01, aspect=30` |
+| Colorbar dominates figure | Default colorbar size | Use context-dependent recipe (Section 5) |
 | Unicode in labels | Used subscript characters | Write `Log2` not `Log_2`, `CO2` not `CO_2` |
 | Uneditable fonts in PDF | Wrong fonttype | `mpl.rcParams['pdf.fonttype'] = 42` |
+| Multi-panel overlap/collision | Flat `hspace/wspace=0.02` on heterogeneous figure | Use nested GridSpec with `hspace=0.35`, `wspace=0.30` |
+| Oversized heatmap cells | `aspect='auto'` with wide GridSpec allocation | `aspect='equal'` + narrow `width_ratios` column |
+| Invisible sliver colorbars | Applied `fraction=0.008` to scatter/hexbin panels | Use `shrink=0.6, pad=0.02` for non-heatmap panels |
+| Unwanted panel titles | Added `set_title()` to individual panels | Remove all titles; describe panels in figure caption |
+| Bold text on non-label elements | `fontweight='bold'` on axis labels/annotations | Bold ONLY on panel letters (`A`, `B`, `C`…) |
+| PDF composition text mismatch | Stitched PDFs with different native widths | Source PDFs must match physical width before composition |
 
 ---
 
-## 10. FLEXIBLE MULTI-ROW LAYOUTS
-
-Use nested GridSpec when different rows need different column structures:
-
-```python
-# Main grid with different height ratios per row
-gs = gridspec.GridSpec(4, 4, figure=fig,
-                       height_ratios=[1.2, 1, 1, 1.15],
-                       hspace=0.35, wspace=0.40)
-
-# Row 0: 2 panels (map + plot) with custom width ratios
-gs_row0 = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0, :],
-                                            width_ratios=[1.6, 1.0],
-                                            wspace=0.25)
-
-# Row 1: 3 wider panels
-gs_row1 = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[1, :],
-                                            width_ratios=[1, 1, 1],
-                                            wspace=0.35)
-
-# Access panels from nested GridSpec
-ax_a = fig.add_subplot(gs_row0[0], projection=ccrs.Robinson())
-ax_b = fig.add_subplot(gs_row0[1])
-ax_c = fig.add_subplot(gs_row1[0])
-```
-
-### Common Layout Recipes
-
-**Map + Training Curves (2 panels, top row):**
-- `width_ratios=[1.6, 1.0]` — map slightly wider
-
-**3 UMAP/Scatter Panels (middle row):**
-- `width_ratios=[1, 1, 1], wspace=0.35`
-
-**Counterfactual Row (map + bars + scatter):**
-- `width_ratios=[1.7, 0.15, 1.0, 0.9]` — wide map, spacer, two analysis panels
-
----
-
-## 11. CARTOPY WORLD MAPS
-
-```python
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-
-ax = fig.add_subplot(gs[0, :], projection=ccrs.Robinson())
-
-# Light theme (publication-friendly)
-ax.set_facecolor('#f0f8ff')  # Alice blue ocean
-ax.add_feature(cfeature.LAND, facecolor='#e8e8e8', edgecolor='none')
-ax.add_feature(cfeature.COASTLINE, linewidth=0.2, edgecolor='#666666')
-for spine in ax.spines.values():
-    spine.set_visible(False)
-ax.set_global()
-
-# Plot points with transform
-ax.scatter(lon, lat, c=color, s=5, alpha=0.7,
-           transform=ccrs.PlateCarree(),
-           edgecolors='black', linewidths=0.1)
-```
-
----
-
-## 12. PANEL LABELS
-
-```python
-# Option 1: As title (left-aligned) — simple, most common
-ax.set_title('A', loc='left', fontweight='bold', fontsize=8)
-
-# Option 2: As text annotation (for maps/complex panels with projections)
-ax.text(0.02, 0.98, 'A', transform=ax.transAxes,
-        fontsize=8, fontweight='bold', va='top', ha='left',
-        bbox=dict(boxstyle='round,pad=0.2', facecolor='white',
-                 edgecolor='none', alpha=0.8))
-```
-
----
-
-## 13. COMPACT MULTI-PANEL COLORBARS & LEGENDS
-
-### Colorbars
-```python
-# Vertical (alongside scatter) — compact
-cbar = fig.colorbar(sc, ax=ax, fraction=0.04, pad=0.02, aspect=15)
-cbar.ax.tick_params(labelsize=6, width=0.25, length=1.5)
-cbar.outline.set_linewidth(0.25)
-
-# Horizontal (below heatmap)
-cbar = fig.colorbar(im, ax=ax, orientation='horizontal',
-                    fraction=0.06, pad=0.15, aspect=20)
-```
-
-### Compact Legends
-```python
-# Multi-column legend for maps (many categories)
-ax.legend(loc='lower left', frameon=True, facecolor='white', edgecolor='none',
-          fontsize=5, ncol=4, markerscale=0.8, handletextpad=0.2,
-          columnspacing=0.5, bbox_to_anchor=(0.0, -0.02))
-
-# Minimal legend for line plots
-from matplotlib.lines import Line2D
-leg_elements = [Line2D([0], [0], color='gray', lw=0.5, label='Train'),
-                Line2D([0], [0], color='gray', lw=0.5, ls='--', label='Val')]
-ax.legend(handles=leg_elements, loc='upper right', frameon=False, handlelength=1)
-```
-
----
-
-## 14. RASTERIZATION FOR DENSE SCATTER
-
-Rasterize scatter plots with many points to reduce file size while keeping axes/text vector:
-
-```python
-ax.scatter(x, y, c=colors, s=2, alpha=0.6, rasterized=True)
-```
-
----
-
-## 15. CATEGORICAL COLOR PALETTES
-
-### MODIS Ocean Basin Palette (colorblind-friendly)
-```python
-BASIN_COLORS = {
-    'Atlantic': '#1f77b4',      # Blue
-    'Pacific': '#d62728',       # Red
-    'Mediterranean': '#ff7f0e', # Orange
-    'Indian': '#2ca02c',        # Green
-    'Southern': '#9467bd',      # Purple
-    'Arctic': '#17becf',        # Cyan
-    'Red_Sea': '#e377c2'        # Pink
-}
-```
-
-### Model Comparison Palette
-```python
-MODEL_COLORS = {
-    '(a) Baseline': '#2166ac',  # Blue
-    '(b) Model A': '#b2182b',   # Red
-    '(c) Model B': '#1b7837'    # Green
-}
-```
-
----
-
-## 16. FIGURE SIZE STANDARDS
+## 10. FIGURE SIZE STANDARDS
 
 | Context | Width | Notes |
 |---|---|---|
