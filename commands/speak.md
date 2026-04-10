@@ -11,14 +11,18 @@ Parse `$ARGUMENTS` as whitespace-separated tokens. Any token starting with `--` 
 
 ## 1. Canonical pipeline script
 
+The flagship pipeline of `gpu-tts-toolkit` is `media_to_tts.py` — a single tool that accepts any text-bearing file (PDF, LaTeX, Markdown, plain text, or a mixed bundle) and emits a narrated MP3 with automatic QC / hallucination screening.
+
 Locate the pipeline in this order and use the first that exists:
 
-1. `/media/drn2/External/working-tts-gpu/manuscript_to_tts_20260408_104500.py`
-2. `/home/drn2/Documents/working-tts-gpu/gpu-tts-toolkit/manuscript_to_tts.py`
+1. `/media/drn2/External/working-tts-gpu/media_to_tts.py`
+2. `/home/drn2/Documents/working-tts-gpu/gpu-tts-toolkit/media_to_tts.py`
+3. `/media/drn2/External/working-tts-gpu/manuscript_to_tts_20260408_104500.py` *(legacy dated fallback)*
+4. `/home/drn2/Documents/working-tts-gpu/gpu-tts-toolkit/manuscript_to_tts.py` *(pre-rename fallback)*
 
-If neither exists, abort with:
+If none exist, abort with:
 ```
-ERROR: manuscript_to_tts.py not found. Clone https://github.com/olympus-terminal/gpu-tts-toolkit first.
+ERROR: media_to_tts.py not found. Clone https://github.com/olympus-terminal/gpu-tts-toolkit first.
 ```
 
 Bind the path to `$SCRIPT` for the rest of this command.
@@ -27,7 +31,7 @@ Bind the path to `$SCRIPT` for the rest of this command.
 
 ## 2. Real CLI surface of the pipeline
 
-The pipeline script `manuscript_to_tts.py` accepts exactly these flags (do not invent others):
+The pipeline script `media_to_tts.py` accepts exactly these flags (do not invent others):
 
 | Flag | Meaning |
 |------|---------|
@@ -61,7 +65,7 @@ For each input, detect the type by extension (or Content-Type for URLs) and act 
 | Input | Action |
 |-------|--------|
 | `.tex` | native → LaTeXTTSCleaner |
-| `.pdf` | native → ManuscriptTTSCleaner (pdftotext) |
+| `.pdf` | native → PDFTTSCleaner (pdftotext) |
 | `.md`, `.markdown` | native → MarkdownTTSCleaner |
 | `.txt`, `.log` | native → PlainTextTTSCleaner |
 | `.docx`, `.odt`, `.rtf` | `pandoc -f <fmt> -t gfm -o scratch.md` |
@@ -188,7 +192,7 @@ Then, if any flags > 0, list the top 3 trigger categories with counts.
 
 ```
 /speak paper.pdf
-/speak manuscript.tex --voice p230
+/speak main.tex --voice p230
 /speak reviews.txt responses.md --headers "Reviews." "Responses."
 /speak https://arxiv.org/pdf/2401.00529
 /speak ~/Documents/thesis/*.tex
