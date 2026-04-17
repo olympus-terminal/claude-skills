@@ -325,4 +325,172 @@ When editing gene names, protein IDs, or other scientific labels:
 
 ---
 
+## 9. BACKGROUND BOXES (LABEL READABILITY)
+
+Network figures, scatter plots, and other dense visualizations need semi-transparent background boxes behind text labels so they remain readable over edges, nodes, and other elements.
+
+### Standard Background Box Path
+
+A rounded-rectangle background box in matplotlib/Illustrator SVG uses a `<path>` with cubic bezier corners inside a `<g id="patch_N">` group, paired with the text element inside a common parent `<g id="text_N">`:
+
+```xml
+<g id="text_23">
+  <g id="patch_15">
+    <path class="st61" d="M{x},{y}h{w}c.8,0,1.2-.4,1.2-1.2v-{h}c0-.8-.4-1.2-1.2-1.2h-{w}c-.8,0-1.2.4-1.2,1.2v{h}c0,.8.4,1.2,1.2,1.2Z"/>
+  </g>
+  <g class="st56">
+    <text class="st57" transform="translate({text_x} {text_y})"><tspan x="0" y="0">Label</tspan></text>
+  </g>
+</g>
+```
+
+The path coordinates relate to the text `translate()` as:
+- `path x` = `text_x + x_padding` (typically -2 for left padding)
+- `path y` = `text_y + y_offset` (typically +2.5 to +3.5 below baseline)
+- `w` should cover the full text width (for 12px Arial, ~7px/char × nchars)
+- `h` should cover the full text height (~13 for 12px font)
+
+### Standardizing Box Dimensions
+
+When boxes have inconsistent sizes (common after Illustrator re-saves), standardize them:
+
+```python
+BOX_W = 56        # covers 8 chars at 12px
+BOX_H_INNER = 13  # vertical span
+BOX_R = 1.2       # corner radius
+X_PAD = -2        # left padding beyond text origin
+Y_OFFSET = 3.5    # box bottom below text baseline
+
+def make_box_path(label_x, label_y):
+    bx = label_x + X_PAD
+    by = label_y + Y_OFFSET
+    return (f"M{bx:.1f},{by:.1f}h{BOX_W}"
+            f"c.8,0,{BOX_R}-.4,{BOX_R}-{BOX_R}v-{BOX_H_INNER}"
+            f"c0-.8-.4-{BOX_R}-{BOX_R}-{BOX_R}h-{BOX_W}"
+            f"c-.8,0-{BOX_R}.4-{BOX_R},{BOX_R}v{BOX_H_INNER}"
+            f"c0,.8.4,{BOX_R},{BOX_R},{BOX_R}Z")
+```
+
+### Box Style (CSS)
+
+The box `<path>` typically uses a class with:
+```css
+.st61 {
+    fill: #fff;
+    opacity: .7;    /* 60-80% works well */
+}
+```
+
+### When Labels Move, Boxes Must Follow
+
+If you reposition labels via `translate()` changes, **always update the paired `<path>` coordinates** in the same pass. Orphaned boxes at old positions are a common artifact of programmatic label editing.
+
+### Adding Boxes to Labels That Lack Them
+
+Labels added after initial figure generation won't have background boxes. Add them by inserting a `<g id="patch_...">` sibling before the text group inside the parent `<g id="text_...">`.
+
+---
+
+## 10. LABEL OVERLAP RESOLUTION
+
+### Force-Directed Repulsion Algorithm
+
+When labels overlap, apply a simple repulsion to push them apart:
+
+```python
+def repel_labels(group, iterations=80, padding_x=3, padding_y=2):
+    for _ in range(iterations):
+        moved = False
+        for i in range(len(group)):
+            for j in range(i+1, len(group)):
+                a, b = group[i], group[j]
+                dx = a['x'] - b['x']; dy = a['y'] - b['y']
+                min_dx = (a['w'] + b['w'])/2 + padding_x
+                min_dy = (a['h'] + b['h'])/2 + padding_y
+                adx = abs(dx) or 0.1; ady = abs(dy) or 0.1
+                if adx < min_dx and ady < min_dy:
+                    sy = 1 if dy >= 0 else -1
+                    sx = 1 if dx >= 0 else -1
+                    a['y'] += sy * (min_dy-ady)/2 * 0.6
+                    b['y'] -= sy * (min_dy-ady)/2 * 0.6
+                    a['x'] += sx * (min_dx-adx)/2 * 0.3
+                    b['x'] -= sx * (min_dx-adx)/2 * 0.3
+                    moved = True
+        if not moved:
+            break
+```
+
+### Text Width Estimation
+
+For overlap detection, estimate text bounding boxes from font metrics:
+- **12px Arial**: ~7.2px per character width, ~15.6px height
+- **6px Arial**: ~3.6px per character width, ~7.8px height
+- General formula: `width = nchars * font_size * 0.6`, `height = font_size * 1.3`
+
+### Region-Based Processing
+
+Process labels in spatial groups (e.g., main panel vs insets) to avoid labels from different panels interfering with each other. Group by coordinate thresholds.
+
+---
+
+## 11. RASTERIZED-TO-VECTOR TEXT CONVERSION
+
+### The Problem
+
+Matplotlib plots embedded in composite SVGs (via Illustrator or programmatic assembly) often arrive as `<image>` elements containing base64-encoded PNGs. All text within these raster images — axis labels, tick labels, titles, colorbars — is not editable and will not scale cleanly at print resolution.
+
+### Detection
+
+```python
+images = re.findall(r'<image[^>]*href="data:image/png;base64,([^"]*)"', svg)
+# If images exist, check if they contain text that should be vector
+```
+
+### Vectorization Workflow
+
+1. **Extract the embedded PNG** to inspect it:
+```python
+import base64
+png_data = base64.b64decode(base64_string)
+with open('panel_extracted.png', 'wb') as f:
+    f.write(png_data)
+```
+
+2. **Determine the image transform** — find `translate(x y)` and `scale(s)` on the `<image>` element and any parent `<g>` groups. Walk up the DOM counting open/close `<g>` tags to find actual parents.
+
+3. **Map pixel coordinates to SVG coordinates**:
+```python
+# For transform="translate(IX IY) scale(S)"
+def px2svg(px_x, px_y):
+    return (IX + px_x * S, IY + px_y * S)
+```
+
+4. **Add white mask rectangles** over rasterized text areas:
+```xml
+<rect x="..." y="..." width="..." height="..." fill="white"/>
+```
+
+5. **Add vector `<text>` elements** at the computed SVG positions:
+```xml
+<text font-family="Arial, sans-serif" font-size="7" fill="#333"
+      text-anchor="end" x="403.8" y="365.8">Feature_Name</text>
+```
+
+6. **Group all overlay elements** in a `<g id="vector_text_overlay">` for easy selection in Illustrator.
+
+### Common Panel Types That Need This
+
+- **SHAP beeswarm plots**: y-axis feature names, x-axis label, colorbar text
+- **Matplotlib subplots**: axis labels, tick labels, titles
+- **Heatmap panels**: row/column labels embedded in raster
+
+### Positioning Tips
+
+- Y-axis labels are typically right-aligned (`text-anchor="end"`) at a consistent x
+- X-axis tick labels are center-aligned (`text-anchor="middle"`)
+- Rotated labels (e.g., colorbar "Feature value") use `transform="rotate(90 cx cy)"`
+- Estimate positions from the PNG pixel layout, then tell the user positions are approximate — they can nudge in Illustrator
+
+---
+
 *SVG expert mode is now active. All SVG operations in this session will follow these standards.*
