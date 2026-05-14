@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 #
-# install.sh — Make all commands in this repo available to every Claude Code
-# session on the current machine by symlinking them into ~/.claude/commands/.
+# install.sh — Make all commands and skills in this repo available to every
+# Claude Code session on the current machine by symlinking them into
+# ~/.claude/commands/ and ~/.claude/skills/.
 #
 # Design goals:
 #   - Idempotent: safe to run any number of times.
-#   - Non-destructive: any pre-existing regular file in ~/.claude/commands/
-#     is backed up to <name>.bak-<timestamp> before being replaced by a symlink.
+#   - Non-destructive: any pre-existing regular file is backed up to
+#     <name>.bak-<timestamp> before being replaced by a symlink.
 #   - Preserves local-only files (e.g. export_session.py) untouched.
 #   - Supports bootstrap from scratch on a new machine via `--clone`.
-#   - Supports `--update` to fast-forward the repo and re-link any new commands.
+#   - Supports `--update` to fast-forward the repo and re-link any new items.
 #
 # Usage:
-#   ./install.sh                  # link this checkout into ~/.claude/commands/
+#   ./install.sh                  # link this checkout into ~/.claude/
 #   ./install.sh --clone          # git clone into $REPO_DIR first, then link
 #   ./install.sh --update         # git pull in $REPO_DIR, then re-link
 #   ./install.sh --dry-run        # show what would happen without doing it
@@ -28,7 +29,8 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-$HOME/Documents/claude-skills}"
 CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
 REMOTE="${REMOTE:-git@github.com:olympus-terminal/claude-skills.git}"
-TARGET_DIR="$CLAUDE_HOME/commands"
+CMD_TARGET="$CLAUDE_HOME/commands"
+SKILL_TARGET="$CLAUDE_HOME/skills"
 DRY=0
 ACTION=install
 
@@ -81,12 +83,36 @@ do_update() {
     run git -C "$REPO_DIR" pull --ff-only origin main
 }
 
+link_file() {
+    local src="$1" dst="$2" stamp="$3"
+
+    if [ -L "$dst" ]; then
+        local current
+        current="$(readlink "$dst")"
+        if [ "$current" = "$src" ]; then
+            return 1  # already up-to-date
+        fi
+        run rm "$dst"
+        run ln -s "$src" "$dst"
+        return 2  # relinked
+    elif [ -e "$dst" ]; then
+        local bak="${dst}.bak-${stamp}"
+        echo "Backing up existing $(basename "$dst") -> $(basename "$bak")"
+        run mv "$dst" "$bak"
+        run ln -s "$src" "$dst"
+        return 3  # backed up + installed
+    else
+        run ln -s "$src" "$dst"
+        return 0  # new install
+    fi
+}
+
 link_commands() {
     if ! have_repo; then
         echo "No repo at $REPO_DIR. Run with --clone first." >&2
         exit 1
     fi
-    run mkdir -p "$TARGET_DIR"
+    run mkdir -p "$CMD_TARGET"
 
     local installed=0 relinked=0 backed_up=0 skipped=0
     local stamp
@@ -96,49 +122,88 @@ link_commands() {
     for src in "$REPO_DIR/commands/"*.md; do
         local name
         name="$(basename "$src")"
-        local dst="$TARGET_DIR/$name"
+        local dst="$CMD_TARGET/$name"
 
-        if [ -L "$dst" ]; then
+        link_file "$src" "$dst" "$stamp" || true
+        local rc=$?
+        case $rc in
+            0) installed=$((installed + 1)) ;;
+            1) skipped=$((skipped + 1)) ;;
+            2) relinked=$((relinked + 1)) ;;
+            3) backed_up=$((backed_up + 1)); installed=$((installed + 1)) ;;
+        esac
+    done
+    shopt -u nullglob
+
+    echo ""
+    echo "Commands:"
+    echo "  Linked (new):       $installed"
+    echo "  Re-linked:          $relinked"
+    echo "  Already up-to-date: $skipped"
+    echo "  Backed up:          $backed_up"
+}
+
+link_skills() {
+    if ! have_repo; then
+        echo "No repo at $REPO_DIR. Run with --clone first." >&2
+        exit 1
+    fi
+
+    local installed=0 relinked=0 backed_up=0 skipped=0
+    local stamp
+    stamp="$(date +%Y%m%d-%H%M%S)"
+
+    shopt -s nullglob
+    for skill_dir in "$REPO_DIR/skills/"*/; do
+        local skill_name
+        skill_name="$(basename "$skill_dir")"
+        local dst_dir="$SKILL_TARGET/$skill_name"
+
+        if [ -L "$dst_dir" ]; then
             local current
-            current="$(readlink "$dst")"
-            if [ "$current" = "$src" ]; then
+            current="$(readlink "$dst_dir")"
+            if [ "$current" = "${skill_dir%/}" ]; then
                 skipped=$((skipped + 1))
                 continue
             fi
-            # symlink but pointing elsewhere — replace
-            run rm "$dst"
-            run ln -s "$src" "$dst"
+            run rm "$dst_dir"
+            run ln -s "${skill_dir%/}" "$dst_dir"
             relinked=$((relinked + 1))
-        elif [ -e "$dst" ]; then
-            # regular file — back it up then symlink
-            local bak="${dst}.bak-${stamp}"
-            echo "Backing up existing $name -> $(basename "$bak")"
-            run mv "$dst" "$bak"
-            run ln -s "$src" "$dst"
+        elif [ -d "$dst_dir" ]; then
+            local bak="${dst_dir}.bak-${stamp}"
+            echo "Backing up existing skill $skill_name -> $(basename "$bak")"
+            run mv "$dst_dir" "$bak"
+            run ln -s "${skill_dir%/}" "$dst_dir"
             backed_up=$((backed_up + 1))
             installed=$((installed + 1))
         else
-            run ln -s "$src" "$dst"
+            run mkdir -p "$SKILL_TARGET"
+            run ln -s "${skill_dir%/}" "$dst_dir"
             installed=$((installed + 1))
         fi
     done
     shopt -u nullglob
 
     echo ""
-    echo "Summary:"
+    echo "Skills:"
     echo "  Linked (new):       $installed"
     echo "  Re-linked:          $relinked"
     echo "  Already up-to-date: $skipped"
     echo "  Backed up:          $backed_up"
+}
+
+link_all() {
+    link_commands
+    link_skills
     echo ""
-    echo "Commands now available in $TARGET_DIR:"
-    ls -la "$TARGET_DIR" | awk 'NR>1 && /\.md/ {print "  " $NF " " $(NF-1) " " $NF}' | column -t || true
+    echo "Done. Commands in $CMD_TARGET, skills in $SKILL_TARGET."
 }
 
 do_uninstall() {
     shopt -s nullglob
     local removed=0
-    for l in "$TARGET_DIR"/*.md; do
+
+    for l in "$CMD_TARGET"/*.md; do
         if [ -L "$l" ]; then
             local tgt
             tgt="$(readlink "$l")"
@@ -150,6 +215,23 @@ do_uninstall() {
             esac
         fi
     done
+
+    for l in "$SKILL_TARGET"/*/; do
+        local name
+        name="$(basename "$l")"
+        local link="$SKILL_TARGET/$name"
+        if [ -L "$link" ]; then
+            local tgt
+            tgt="$(readlink "$link")"
+            case "$tgt" in
+                "$REPO_DIR"/skills/*)
+                    run rm "$link"
+                    removed=$((removed + 1))
+                    ;;
+            esac
+        fi
+    done
+
     shopt -u nullglob
     echo "Removed $removed symlink(s) pointing into $REPO_DIR"
     echo "Backup files (.bak-*) were left in place; restore manually if needed."
@@ -157,15 +239,15 @@ do_uninstall() {
 
 case "$ACTION" in
     install)
-        link_commands
+        link_all
         ;;
     clone)
         do_clone
-        link_commands
+        link_all
         ;;
     update)
         do_update
-        link_commands
+        link_all
         ;;
     uninstall)
         do_uninstall
