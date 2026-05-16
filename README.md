@@ -70,6 +70,12 @@ Commands are symlinked into `~/.claude/commands/`, skills into `~/.claude/skills
 | `/doc-gen` | Generate documentation for code |
 | `/deps-check` | Check dependencies for issues and updates |
 
+### Visualization
+
+| Command | Description |
+|---------|-------------|
+| `/artist` | Publication-quality figure mode (matplotlib, TikZ, seaborn, SVG). Enforces 6pt Arial, project palettes, programmatic overlap detection, and a mandatory render-check-fix iteration loop. |
+
 ### Scientific Writing & Review
 
 | Command | Description |
