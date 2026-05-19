@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="claude-skills banner" width="100%">
+</p>
+
 # Claude Skills
 
 A collection of custom Claude Code [Anthropic] commands and skills for enhanced productivity.
