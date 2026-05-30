@@ -196,9 +196,9 @@ ONLY WORK ON YOUR SINGLE ASSIGNED TASK.
 
 ---
 
-## 5. CRITICAL RULES FOR THIS PROJECT
+## 5. CRITICAL RULES
 
-These are hard-won lessons from 58+ ralph runs on this manuscript:
+These are hard-won lessons from 58+ ralph runs:
 
 ### Data integrity (non-negotiable)
 - NEVER fabricate, simulate, or estimate scientific values
@@ -255,16 +255,14 @@ The user runs ralph.sh from the terminal — do NOT attempt to run it from withi
 
 ---
 
-## 7. FILE LOCATIONS
+## 7. KEY REFERENCES
 
-| Item | Path |
-|------|------|
-| Ralph orchestrator | `/media/drn2/External/TARA-Oceans/MANUSCRIPT/ralph.sh` |
-| Mission configs | `/media/drn2/External/TARA-Oceans/MANUSCRIPT/ralph*_config.sh` |
-| Master guide | `/media/drn2/External/TARA-Oceans/MANUSCRIPT/RALPH_WIGGUM_MASTER_GUIDE.md` |
-| Original methodology | `/media/drn2/External/TARA-Oceans/MANUSCRIPT/RALPH_original_guide_huntley.txt` |
-| Remote repo | `https://github.com/olympus-terminal/worktree-agent-loop` |
-| Git remote | `git@github.com:olympus-terminal/ELF-NET-manuscript.git` |
+| Item | Location |
+|------|----------|
+| Framework repo | `https://github.com/olympus-terminal/worktree-agent-loop` |
+| Ralph orchestrator | `ralph.sh` in project root (or install from framework repo) |
+| Mission configs | `ralph*_config.sh` in project root |
+| Original methodology | Search for `RALPH_WIGGUM_MASTER_GUIDE.md` or `RALPH_original_guide_huntley.txt` in the project |
 
 ---
 
