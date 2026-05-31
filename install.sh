@@ -135,8 +135,24 @@ link_commands() {
     done
     shopt -u nullglob
 
+    # Also link supporting scripts into the commands dir
+    for src in "$REPO_DIR/scripts/"*.py; do
+        local name
+        name="$(basename "$src")"
+        local dst="$CMD_TARGET/$name"
+
+        link_file "$src" "$dst" "$stamp" || true
+        local rc=$?
+        case $rc in
+            0) installed=$((installed + 1)) ;;
+            1) skipped=$((skipped + 1)) ;;
+            2) relinked=$((relinked + 1)) ;;
+            3) backed_up=$((backed_up + 1)); installed=$((installed + 1)) ;;
+        esac
+    done
+
     echo ""
-    echo "Commands:"
+    echo "Commands + scripts:"
     echo "  Linked (new):       $installed"
     echo "  Re-linked:          $relinked"
     echo "  Already up-to-date: $skipped"
@@ -203,12 +219,12 @@ do_uninstall() {
     shopt -s nullglob
     local removed=0
 
-    for l in "$CMD_TARGET"/*.md; do
+    for l in "$CMD_TARGET"/*.md "$CMD_TARGET"/*.py; do
         if [ -L "$l" ]; then
             local tgt
             tgt="$(readlink "$l")"
             case "$tgt" in
-                "$REPO_DIR"/commands/*)
+                "$REPO_DIR"/commands/*|"$REPO_DIR"/scripts/*)
                     run rm "$l"
                     removed=$((removed + 1))
                     ;;

@@ -13,7 +13,8 @@ claude-skills/
 ├── commands/              # Slash commands (.md files → ~/.claude/commands/)
 ├── skills/                # Skill directories (→ ~/.claude/skills/)
 │   ├── caveman/           #   /caveman — toggle caveman-speak
-│   └── multi-agent/       #   /multi-agent — parallel agent orchestration
+│   ├── multi-agent/       #   /multi-agent — parallel agent orchestration
+│   └── p-ralph/           #   /p-ralph — parallel Ralph Wiggum methodology
 ├── scripts/               # Supporting Python scripts
 ├── install.sh             # Symlink installer (--clone, --update, --uninstall)
 └── examples/              # Example configurations
@@ -95,11 +96,12 @@ Commands are symlinked into `~/.claude/commands/`, skills into `~/.claude/skills
 |---------|-------------|
 | `/signoff` | Write structured handoff note for the next agent/session |
 
-### HPC Commands
+### HPC & Infrastructure Commands
 
 | Command | Description |
 |---------|-------------|
 | `/hpc` | Load Jubail HPC best practices into the session |
+| `/spark` | Load DGX Spark (GB10) access and context into the session |
 
 ## Available Skills
 
@@ -109,12 +111,17 @@ Skills are richer than commands — they have their own directories with support
 |-------|-------------|
 | `/caveman` | Toggle caveman-speak mode. Prose goes caveman, code stays untouched. |
 | `/multi-agent` | Orchestrate 3-6 parallel agents for papers, projects, or research. Modes: `paper`, `project`, `research`, `custom`. |
+| `/p-ralph` | Parallel Ralph Wiggum methodology — isolated git worktree agents for multi-task manuscript/project work. |
 
 ### `/multi-agent` details
 
 Includes two planning templates:
 - `paper-template.md` — Decompose academic papers into Literature/Methods/Results/Discussion agents
 - `project-template.md` — Decompose software projects into Architect/Implementer/Tests agents
+
+### `/p-ralph` details
+
+Parallel Ralph Wiggum (P-RALPH) methodology for multi-task work. Spawns agents in isolated git worktrees so they can edit files in parallel without conflicts. Designed for manuscript preparation, multi-figure generation, and project-wide refactors where tasks are independent but share a codebase.
 
 ## Command Details
 
@@ -174,6 +181,9 @@ Check for outdated packages, security vulnerabilities, and dependency issues.
 
 ### `/hpc`
 Load NYU Abu Dhabi Jubail HPC best practices into the current session. Teaches Claude the `/scratch/drn2/` path conventions, SLURM template requirements, Python environment detection patterns, partition selection, and known pitfalls. Run this at the start of any HPC-related session.
+
+### `/spark`
+Load NVIDIA DGX Spark (GB10) connection details, hardware specs, and known pitfalls into the current session. Covers SSH access, Ollama service, file transfer patterns, and ARM/aarch64 caveats. Run this at the start of any Spark-related session.
 
 ## Contributing
 

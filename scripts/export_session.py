@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Export Claude Code session to readable .log file
-Usage: python3 export_session.py /path/to/project [output.log]
+Usage: python3 export_session.py /path/to/project
 """
 
 import json
@@ -11,12 +11,21 @@ from datetime import datetime
 from pathlib import Path
 
 def get_session_dir(project_path):
-    """Convert project path to Claude session directory name"""
-    # Claude uses dashes for slashes and underscores
-    session_name = project_path.replace('/', '-').replace('_', '-')
-    if not session_name.startswith('-'):
-        session_name = '-' + session_name
-    return Path.home() / '.claude' / 'projects' / session_name
+    """Find the Claude session directory by walking up from project_path"""
+    projects_dir = Path.home() / '.claude' / 'projects'
+    path = Path(project_path).resolve()
+
+    while path != path.parent:
+        # Claude internally uses hyphens for path separators in directory names
+        session_name = str(path).replace('/', '-')
+        if not session_name.startswith('-'):
+            session_name = '-' + session_name
+        candidate = projects_dir / session_name
+        if candidate.exists():
+            return candidate
+        path = path.parent
+
+    return projects_dir / str(Path(project_path).resolve()).replace('/', '-')
 
 def find_latest_session(session_dir):
     """Find the most recently modified session file"""
@@ -89,10 +98,20 @@ def export_session(project_path, output_path=None):
             except json.JSONDecodeError:
                 continue
 
-    # Generate output
+    # Generate output with chat.log, chat1.log, chat2.log naming
     if output_path is None:
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_path = Path(project_path) / f'session_log_{timestamp}.log'
+        base_dir = Path(project_path)
+        base_name = base_dir / 'chat.log'
+
+        if not base_name.exists():
+            output_path = base_name
+        else:
+            n = 1
+            while True:
+                output_path = base_dir / f'chat{n}.log'
+                if not output_path.exists():
+                    break
+                n += 1
 
     with open(output_path, 'w') as f:
         f.write(f"# Claude Code Session Log\n")
