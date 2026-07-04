@@ -58,6 +58,30 @@ Music: <full path to Music directory>
 
 ---
 
+## 1b. No-Argument Auto-Select
+
+If `$ARGUMENTS` is empty (user just typed `/push2phone` with no files):
+
+1. Search for the most recently created `.mp3` under `processed/` subdirectories and `_complete.mp3` files elsewhere:
+
+```bash
+find . /media/drn2/External/working-tts-gpu/gpu-tts-toolkit \
+    -maxdepth 3 \( -path "*/processed/*.mp3" -o -name "*_complete.mp3" \) \
+    -type f -mmin -15 \
+    -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1
+```
+
+2. If a file is found (created within the last 15 minutes):
+   - Treat it as a ready-to-copy audio file (skip TTS)
+   - Report: `Auto-selected: <filename> (<size> MB, <duration>) — created <N> min ago`
+   - Proceed directly to **§4. Copy to Phone**
+
+3. If no recent output is found:
+   - List the 7 most recent `.mp3` files from `processed/` dirs and `_complete.mp3` files (any age) with date, size, and duration
+   - Ask the user to pick one or provide an input file
+
+---
+
 ## 2. Input Processing — Decide TTS vs Direct Copy
 
 For each input file, check the extension:
@@ -211,6 +235,7 @@ If TTS was performed, also show the /speak summary (flags, chunk count, etc.).
 ## 8. Examples
 
 ```
+/push2phone                                        # auto-select most recent _complete.mp3 (≤15 min old)
 /push2phone main.pdf supplemental_information.pdf
 /push2phone paper.tex --voice p230 --name my_paper
 /push2phone recording.mp3 --skip-tts
@@ -223,10 +248,11 @@ If TTS was performed, also show the /speak summary (flags, chunk count, etc.).
 ## 9. Implementation Flow
 
 1. Discover phone via MTP
-2. Classify each input as audio (direct copy) or text (needs TTS)
-3. Run pre-flight checks for any TTS inputs
-4. Synthesize via gpu-tts-toolkit pipeline
-5. Derive output filename(s)
-6. Copy MP3(s) to phone via `gio copy`
-7. Verify transfer
-8. Emit summary
+2. If no arguments: auto-select most recent `_complete.mp3` (≤15 min) → skip to step 6
+3. Classify each input as audio (direct copy) or text (needs TTS)
+4. Run pre-flight checks for any TTS inputs
+5. Synthesize via gpu-tts-toolkit pipeline
+6. Derive output filename(s)
+7. Copy MP3(s) to phone via `gio copy`
+8. Verify transfer
+9. Emit summary
