@@ -96,13 +96,6 @@ Commands are symlinked into `~/.claude/commands/`, skills into `~/.claude/skills
 |---------|-------------|
 | `/signoff` | Write structured handoff note for the next agent/session |
 
-### HPC & Infrastructure Commands
-
-| Command | Description |
-|---------|-------------|
-| `/hpc` | Load Jubail HPC best practices into the session |
-| `/spark` | Load DGX Spark (GB10) access and context into the session |
-
 ## Available Skills
 
 Skills are richer than commands — they have their own directories with supporting files (templates, state, etc.) and are installed into `~/.claude/skills/`.
@@ -179,11 +172,9 @@ Generate language-appropriate documentation (docstrings, JSDoc, etc.).
 ### `/deps-check`
 Check for outdated packages, security vulnerabilities, and dependency issues.
 
-### `/hpc`
-Load NYU Abu Dhabi Jubail HPC best practices into the current session. Teaches Claude the `/scratch/drn2/` path conventions, SLURM template requirements, Python environment detection patterns, partition selection, and known pitfalls. Run this at the start of any HPC-related session.
+## Portable Export
 
-### `/spark`
-Load NVIDIA DGX Spark (GB10) connection details, hardware specs, and known pitfalls into the current session. Covers SSH access, Ollama service, file transfer patterns, and ARM/aarch64 caveats. Run this at the start of any Spark-related session.
+The `export/` directory contains **agent-agnostic** versions of these skills — no YAML frontmatter, no Claude Code tool references. Drop `export/AGENTS.md` into any project root and any coding agent (OpenCode, Codex, Cursor, Aider) absorbs the capabilities. See `export/README.md` for details.
 
 ## Contributing
 
