@@ -20,6 +20,31 @@ Parse `$ARGUMENTS` as whitespace-separated tokens. Any token starting with `--` 
 
 ## 1. Phone Discovery
 
+Apply any documented known-device fast path (§1a) before generic MTP discovery. Only fall through to the generic discovery below when no known-device mount applies.
+
+### 1a. HONOR LLY-NX1 fast path
+
+This workstation transfers to the daily-use HONOR device through its existing GVfs filesystem mount:
+
+```bash
+MTP_DIR="/run/user/$(id -u)/gvfs/mtp:host=HONOR_LLY-NX1_ALHX6R5311000334"
+MUSIC_DIR="$MTP_DIR/Internal storage/Music"
+```
+
+When that exact mount exists, use it immediately. Do not recursively scan the phone, enumerate `Music`, or query a destination that does not yet exist (this includes skipping the generic storage-root loop and `ls` below). Those operations have blocked `gvfsd-mtp` on this device. A fresh timestamped basename makes a pre-copy destination probe unnecessary.
+
+Copy directly through the mounted path with ordinary `cp`; this is the proven route for this phone. Do not request metadata preservation (no `cp -p`/`-a`) because MTP rejects timestamp changes after successfully writing the payload.
+
+```bash
+cp --update=none "$LOCAL_AUDIO" "$MUSIC_DIR/$TIMESTAMPED_BASENAME"
+```
+
+After `cp` returns, use `stat -c %s` and `sha256sum` on the exact destination path. Require exact size and SHA-256 equality with the local source. Reading an existing completed file through this mount is supported.
+
+On this HONOR device, do not try native `mtp://[usb:...]/...` `gio copy` first; it returned `Operation not supported`. Do not pivot to libmtp, `jmtpfs`, Android File Transfer, USB reset, HonorSuite eject, or Termux while the known GVfs mount exists. If the mount is absent, ask the user to unlock the phone, unplug and replug it, and select File Transfer; then wait for this exact mount to reappear and use the direct mounted-path copy. Never start a second MTP client while a copy or query is still running.
+
+### 1b. Generic MTP discovery (other devices)
+
 Detect a connected mobile device via GVfs/MTP:
 
 ```bash
@@ -58,7 +83,7 @@ Music: <full path to Music directory>
 
 ---
 
-## 1b. No-Argument Auto-Select
+## 1c. No-Argument Auto-Select
 
 If `$ARGUMENTS` is empty (user just typed `/push2phone` with no files):
 
@@ -157,7 +182,7 @@ Resolve the output `_complete.mp3` from the pipeline output directory.
 
 ## 4. Copy to Phone
 
-Use `gio copy` for MTP transfers (regular `cp` does not work with MTP mounts on most systems):
+Use the known HONOR mounted-path fast path (§1a) when it applies. For other devices, use `gio copy` for the MTP URI when available (regular `cp` does not work with MTP mounts on most systems); a filesystem-path fallback may work for a mounted GVfs path, but verify the selected mount first.
 
 ### Filename derivation
 
@@ -172,6 +197,10 @@ Otherwise, derive a clean filename from the input(s):
   - `chapter1.pdf` + `chapter2.pdf` → `chapter1_combined.mp3`
 
 ### Transfer
+
+HONOR LLY-NX1 (known mount present): use the §1a `cp --update=none` command with a fresh timestamped basename, then verify with `stat -c %s` and `sha256sum` as in §1a. Skip the `gio` commands below.
+
+Other devices:
 
 ```bash
 gio copy "$LOCAL_MP3" "mtp://<device_id>/Internal%20storage/Music/$FILENAME"
@@ -191,7 +220,9 @@ After copy, verify the file landed:
 gio info "mtp://<device_id>/Internal%20storage/Music/$FILENAME"
 ```
 
-Check that the reported size matches the local file size (within 1%).
+Compare byte sizes; require an exact match when the backend reports exact bytes. Report the device, destination, filename, media format, size, and duration.
+
+If a copy fails, leave the verified local source untouched and report the actionable MTP error.
 
 ---
 
@@ -228,7 +259,7 @@ If TTS was performed, also show the /speak summary (flags, chunk count, etc.).
 - **MTP copy fails** → suggest: unlock phone screen, re-select File Transfer mode, try `gio mount -l` to verify
 - **TTS pipeline fails** → surface the error from /speak, do not attempt copy
 - **Disk full on phone** → check with `gio info` on the storage root, report available space
-- **File already exists on phone** → overwrite without asking (user explicitly invoked push)
+- **File already exists on phone** → prefer a new timestamped name; replace an existing phone file only when the user explicitly requests replacement of that exact path
 
 ---
 
@@ -247,12 +278,12 @@ If TTS was performed, also show the /speak summary (flags, chunk count, etc.).
 
 ## 9. Implementation Flow
 
-1. Discover phone via MTP
+1. Discover phone: known-device fast path (HONOR LLY-NX1 mount) first, else generic MTP discovery
 2. If no arguments: auto-select most recent `_complete.mp3` (≤15 min) → skip to step 6
 3. Classify each input as audio (direct copy) or text (needs TTS)
 4. Run pre-flight checks for any TTS inputs
 5. Synthesize via gpu-tts-toolkit pipeline
 6. Derive output filename(s)
-7. Copy MP3(s) to phone via `gio copy`
-8. Verify transfer
+7. Copy MP3(s) to phone (HONOR: direct `cp --update=none` to mounted path; other devices: `gio copy`)
+8. Verify transfer (HONOR: exact size + SHA-256; others: exact byte size when reported)
 9. Emit summary

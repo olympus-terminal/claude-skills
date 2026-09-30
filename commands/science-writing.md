@@ -109,7 +109,7 @@ Better:    Expression increased by 40%, consistent with pathway activation.
 Scientific editing benefits from a forced separation between cutting waste and calibrating claims. Run both passes. Do not merge them. Both passes are informed by the Section 0 diagnostics, but they apply different rule sets.
 
 1. **Pass 1 — cut waste.** Remove the patterns in sections 3 through 6. Do not touch meaning. Produce a shorter draft with identical claims. Section 0 is active but only as a lens: if a sentence passes the diagnostics, leave its structure alone and just cut the AI-ism.
-2. **Pass 2 — calibrate claims and restructure.** Align each verb and adjective to the evidence (section 5). Attach numbers to intensifiers (section 4). Replace hedge cascades with a single calibrated hedge. Apply Section 0 diagnostics aggressively: move the protagonist to topic position (0a), put the news in stress position (0b), fix given-new breaks (0c), and rewrite dangling comparisons and referents (0f). Mark any claim that cannot be supported as `[CLAIM UNSUPPORTED — need: ...]` for the author.
+2. **Pass 2 — calibrate claims and restructure.** Align each verb and adjective to the evidence (section 5) without mechanically weakening the author's claim. Attach numbers to intensifiers (section 4). Replace hedge cascades with a single calibrated hedge. Apply Section 0 diagnostics aggressively: move the protagonist to topic position (0a), put the news in stress position (0b), fix given-new breaks (0c), and rewrite dangling comparisons and referents (0f). Mark any claim that cannot be supported as `[CLAIM UNSUPPORTED — need: ...]` for the author.
 
 Present both passes plus a change log. Do not skip Pass 1 to go straight to content rewriting. A Pass-2-only edit silently conflates "your prose is cluttered" with "your claims are miscalibrated", and the author cannot tell which they need to fix.
 
@@ -367,20 +367,37 @@ A p-value without an effect size is incomplete. Report both. For correlations, g
 
 ---
 
-## 5. Claim calibration ladder
+## 5. Claim calibration
 
-Match verb strength to evidence strength. Each rung requires more evidence than the one below.
+Claim verbs are not a single ladder. They describe different relations between evidence and a claim. Match the verb to what the result does:
 
 ```text
-demonstrates / establishes        controlled perturbation, causal evidence
-shows                             direct measurement with adequate replication
-indicates                         strong inference from multiple signals
-suggests                          consistent with data; other interpretations remain
-is consistent with                data do not contradict
-may reflect / could result from   hypothesis-generating
+shows                         reports a directly measured result
+supports                      increases confidence in a specified claim or
+                              interpretation without claiming proof, uniqueness,
+                              establishment, or causation
+demonstrates / establishes    meets the directness and design requirements for
+                              the stated claim; causal claims require causal evidence
+indicates                     strong but indirect inference from multiple signals
+suggests                      preliminary, indirect, noisy, or weakly discriminating evidence
+is consistent with            does not contradict the claim but may not favor it
+nominates                     introduces a candidate mechanism, target, or hypothesis
+                              for testing; does not report evidential support by itself
+may reflect / could result from
+                              hypothesis-generating explanation
 ```
 
-Use "cause" or "causes" only with a controlled perturbation or a formal causal inference framework (RCT, instrumental variable, Mendelian randomization, do-operator). Everything else is "associated with".
+Use `supports` affirmatively when the design, measurement, and result bear on the stated claim. The word already leaves room for alternative explanations. Do not mechanically downgrade it to `suggests`, `is consistent with`, or `nominates` because the evidence does not establish causality. Do not automatically follow it with "does not establish," "does not prove," or another ritual disclaimer; that merely restates what `supports` already means.
+
+```text
+Weakening:   These transcript changes nominate sterol repression as a possible mechanism.
+Calibrated:  These transcript changes support sterol-program repression as a
+             contributor to HHQ-mediated viral protection.
+```
+
+Preserve an author's `supports` when the evidence genuinely bears on the claim. Change it only when a specific design, measurement, statistical, or scope mismatch makes support itself unjustified, and identify that mismatch rather than substituting a vaguer verb by reflex. Add a separate limitation only when it resolves a real ambiguity or prevents a specific overclaim, not as a mandatory counterweight to every affirmative sentence.
+
+Use "cause" or "causes" only with a controlled perturbation or a formal causal inference framework (RCT, instrumental variable, Mendelian randomization, do-operator). Otherwise describe the measured association. This causal boundary does not prohibit saying that an association supports a noncausal claim or a mechanistic hypothesis.
 
 Separate observation from interpretation. Observations go in Results. Interpretations go in Discussion.
 
@@ -749,6 +766,8 @@ LaTeX integrity check: 47 backslashes in, 47 out. PASSED.
 
 - Do not invent numbers. If an intensifier has no supporting number in the source, flag it. Never fabricate a value.
 - Do not change meaning in Pass 1. All meaning changes belong in Pass 2, and only when calibration requires it.
+- Treat `supports` as a substantive, calibrated evidence verb. It means that the result increases confidence in a specified claim; it does not mean `proves`, `establishes`, or uniquely identifies a mechanism. Do not replace `supports` with `suggests`, `is consistent with`, or `nominates` merely because causality remains unestablished.
+- Let `supports` stand without a ritual "does not establish" or "does not prove" disclaimer; the verb already encodes that distinction. State a remaining boundary separately only when it resolves a genuine ambiguity or prevents a specific overclaim. `Nominates` is appropriate only when the evidence introduces a candidate for later testing, not when the result already bears directly on the stated claim.
 - Preserve citations, equations, display-math, code blocks, and non-breaking ties (`~`) verbatim.
 - Preserve domain terminology unless it is an AI-ism in disguise (e.g., "leverage the landscape of" masquerading as domain vocabulary).
 - Verify LaTeX integrity after editing: the `\` count in output must equal input. If not, refuse the write and report.
@@ -962,8 +981,56 @@ because numbers were added back in Pass 2).
 
 ---
 
+## 11d. LaTeX Verification — use tectonic
+
+- When compiling or verifying a LaTeX manuscript, use Tectonic. Do not invoke `pdflatex`, `xelatex`, or `lualatex` directly unless the user explicitly requests another engine or Tectonic is incompatible with the project; report any fallback clearly.
+- Build into a temporary or dedicated output directory (e.g. `tectonic -X compile main.tex --outdir <dir>`) unless the user asks to refresh a repository PDF. Preserve existing generated PDFs when their provenance or local changes are uncertain.
+
+The skill itself never compiles anything. Editing prose and building a PDF are
+separate jobs, and the skill's integrity guard is the backslash count of
+Section 8 Step 8, not a successful build.
+
+But when the author asks you to confirm the document still compiles after an
+edit, **use tectonic**:
+
+```bash
+tectonic -X compile main.tex --keep-intermediates --synctex=0
+```
+
+**Never reach for `pdflatex` first.** Modern manuscripts routinely declare
+system fonts by name — for example `\font\myfont="Arial" at 6pt`, or anything
+loaded through `fontspec`. Quoted system-font names require a Unicode-aware
+engine. `pdflatex` cannot resolve them; it searches for a `.tfm` metric file,
+fails, and aborts with:
+
+```
+! Font \myfont=Arial at 6.0pt not loadable: Metric (TFM) file not found.
+!  ==> Fatal error occurred, no output PDF file produced!
+```
+
+**That error means the wrong engine was used. It does not mean the manuscript
+is broken, and it does not mean your edit broke it.** Reporting it as a document
+defect is a tooling error, not a finding. Never "fix" a font declaration to
+accommodate pdflatex — that silently changes the author's typography to work
+around your own tool choice.
+
+Tectonic also resolves packages and runs BibTeX itself, so a single invocation
+replaces the latex/bibtex/latex/latex cycle.
+
+If a project specifies a different engine in `CLAUDE.md`, `AGENTS.md`, or a
+build script, that instruction wins. Check before assuming.
+
+Two habits worth keeping:
+
+- Compile once *before* editing, so you know whether any failure is pre-existing.
+  A failure that reproduces on the untouched backup is not yours.
+- After editing, confirm both the backslash-count guard (Section 8 Step 8) and a
+  clean build. They catch different faults: the count catches lost markup, the
+  build catches malformed markup.
+
 ## 12. Interaction with other commands
 
+- For scientific journal cover letters, use `/cover` for letter architecture, journal fit, submission declarations, reviewer information, and final detail checks; use `/science-writing` for prose and claim calibration.
 - `multi-agent paper` (skill) produces a first synthesized draft. Run `/science-writing` on its output to bring it to submission-ready prose. Do not merge the two; orchestration and line editing are different jobs.
 - `/artist` handles figures; `/science-writing` handles legends. If a legend references a panel that does not exist, flag it.
 - Do not touch LaTeX commands, BibTeX entries, or code blocks. The Section 8 masking protocol is the contract: if the protocol cannot handle a construct cleanly, refuse rather than guess.
@@ -971,4 +1038,4 @@ because numbers were added back in Pass 2).
 
 ---
 
-*Science-writing is now active. Provide text or a file path, optionally with `--journal <name>` and `--tutor`. Run format detection, then Pass 1, then Pass 2, then (if tutor mode) the commentary blocks, then the change log. Never skip Pass 1. Never silently corrupt LaTeX — refuse and report.*
+*Science-writing is now active. Provide text or a file path, optionally with `--journal <name>` and `--tutor`. Run format detection, then Pass 1, then Pass 2, then (if tutor mode) the commentary blocks, then the change log. Never skip Pass 1. Never silently corrupt LaTeX — refuse and report. If you verify a build, use tectonic, never pdflatex (Section 11d).*

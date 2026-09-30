@@ -17,7 +17,8 @@ def get_session_dir(project_path):
 
     while path != path.parent:
         # Claude internally uses hyphens for path separators in directory names
-        session_name = str(path).replace('/', '-')
+        # Claude Code normalises both '/' and '_' to '-' in project dir names.
+        session_name = str(path).replace('/', '-').replace('_', '-')
         if not session_name.startswith('-'):
             session_name = '-' + session_name
         candidate = projects_dir / session_name
@@ -25,7 +26,7 @@ def get_session_dir(project_path):
             return candidate
         path = path.parent
 
-    return projects_dir / str(Path(project_path).resolve()).replace('/', '-')
+    return projects_dir / str(Path(project_path).resolve()).replace('/', '-').replace('_', '-')
 
 def find_latest_session(session_dir):
     """Find the most recently modified session file"""
@@ -98,20 +99,15 @@ def export_session(project_path, output_path=None):
             except json.JSONDecodeError:
                 continue
 
-    # Generate output with chat.log, chat1.log, chat2.log naming
+    # Timestamped output: session_log_YYYYMMDD_HHMMSS.log (suffix _N if taken)
     if output_path is None:
         base_dir = Path(project_path)
-        base_name = base_dir / 'chat.log'
-
-        if not base_name.exists():
-            output_path = base_name
-        else:
-            n = 1
-            while True:
-                output_path = base_dir / f'chat{n}.log'
-                if not output_path.exists():
-                    break
-                n += 1
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_path = base_dir / f'session_log_{stamp}.log'
+        n = 1
+        while output_path.exists():
+            output_path = base_dir / f'session_log_{stamp}_{n}.log'
+            n += 1
 
     with open(output_path, 'w') as f:
         f.write(f"# Claude Code Session Log\n")

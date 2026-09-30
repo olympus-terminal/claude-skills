@@ -921,3 +921,34 @@ Validation (render cycle N):
 ---
 
 *Artist mode is now active. Every figure produced in this session will conform to these standards. The render-check-fix loop is mandatory. No exceptions.*
+
+### Manuscript placement: legends that overflow the page
+
+A figure is only finished when it fits its page in the compiled manuscript.
+When a full-width figure plus its legend exceeds the text block, the legend
+prints through the page number (LaTeX warns `Float too large for page by NNpt`).
+Two fixes, in order of preference:
+
+1. **Budget the height.** Page text height minus the legend's line count
+   (at footnote size, ~9.5 pt per line) is the maximum figure height. Tighten
+   the layout (panel spacing, fewer wasted margins) before shrinking text below
+   6 pt, which is never allowed.
+2. **Let the legend spill.** If the figure must stay tall, typeset it in the text
+   flow rather than as a float, so the legend fills to about one line above the
+   page number and continues on the next page:
+
+```latex
+\clearpage
+\begin{center}\includegraphics[width=\textwidth]{figures/fig_example.pdf}\end{center}
+{\footnotesize\setlength{\parindent}{0pt}\refstepcounter{figure}\label{fig:example}%
+Figure~\thefigure: \textbf{Title.} Legend \ldots\par}
+\bigskip
+```
+
+   Pair it with a one-line footer gap in the geometry (e.g. `bottom=0.95in,
+   footskip=0.25in` instead of `bottom=1.2in, footskip=0.5in`; page-number
+   position = bottom - footskip). See `/science-writing` §11e for verification.
+
+After placing, render the actual manuscript page(s) with the figure and legend
+and inspect them; the standalone figure render is not enough.
+

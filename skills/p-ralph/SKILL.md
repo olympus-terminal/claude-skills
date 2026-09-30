@@ -9,6 +9,32 @@ You are being briefed on the **P-RALPH** methodology — a parallel extension of
 
 ---
 
+## 0. ORIENT BEFORE YOU ACT (read this first)
+
+New Claudes repeatedly trip on the same five things. Internalize these before
+doing anything; each is expanded later with the why.
+
+1. **Nothing lives where you assume — `find` first.** The orchestrator
+   (`ralph.sh`), prior configs, and the guides get swept into `archive/` during
+   repo re-orgs. Never trust a hardcoded path. See §7.
+2. **Count missions across ALL homes** (root + `archive/ralph_configs/` +
+   `source_data/ralph*`) before picking the next number. Root alone undercounts
+   because finished missions are archived. When unsure, ASK. See §8 step 0.
+3. **`integrate` merges EVERY worker branch in one pass.** Two tasks touching
+   the same file → conflict → stranded work. To truly serialize, interleave
+   `analysis`+`integrate` per task; don't just split waves. See §5.
+4. **Visual tasks require visual proof.** Regenerate → render to PNG → crop to
+   the panel → Read it → iterate. Summaries lie; a shrunk thumbnail hides
+   overlaps. See §5.
+5. **One command for the user.** Generate `ralphNN_run.sh` and hand over
+   `./ralphNN_run.sh` — not a 5-line staged sequence. See §Execution and §8.
+
+When the work is done: push edits through to the COMPILED artifact (e.g.
+`supplemental_information.pdf`), open only that, and report what you verified —
+not "should be fixed."
+
+---
+
 ## 1. WHAT IS RALPH WIGGUM?
 
 Ralph Wiggum is an autonomous agent loop methodology (originated by Geoffrey Huntley) where a bash loop repeatedly feeds a prompt to Claude Code in headless mode (`-p`). Each iteration:
@@ -95,19 +121,25 @@ tectonic supplemental_information.tex"
 
 ### Execution:
 
+**DEFAULT = ONE SHOT.** Every mission ships a generated `ralphNN_run.sh` launcher
+(see §8) that resolves the orchestrator + config by path and runs the full
+mission. The user should only ever need ONE command:
+
 ```bash
-# Staged run (recommended when tasks share files):
-bash ralph.sh analysis  ralph57_config.sh    # Phase B
-bash ralph.sh integrate ralph57_config.sh    # Phase D
-bash ralph.sh writing   ralph57_config.sh    # Phase C
-bash ralph.sh integrate ralph57_config.sh    # Phase D
-bash ralph.sh verify    ralph57_config.sh    # Phase E
+./ralphNN_run.sh                 # full mission: preflight -> analysis -> writing -> integrate -> verify -> cleanup
+```
 
-# Or one-shot:
-bash ralph.sh all ralph57_config.sh
+`ralph.sh all` already chains every phase, so a single invocation is the norm.
+Do NOT hand the user a 3-5 line staged sequence as the primary instruction —
+that is friction. The launcher hides the orchestrator path (which may live in
+`archive/ralph_configs/ralph.sh` after a re-org, not project root).
 
-# Override task subsets via env:
-WRITING_TASKS_STR="3" bash ralph.sh writing ralph57_config.sh
+Staged / single-phase runs are an ESCAPE HATCH only — surface them only if the
+user asks, or if tasks edit the same shared file and you flag a merge risk:
+
+```bash
+./ralphNN_run.sh analysis        # one phase (analysis|writing|integrate|verify|continue)
+WRITING_TASKS_STR="3" bash <orchestrator> writing ralphNN_config.sh   # task subset
 ```
 
 ### The `wt` CLI (worktree-agent-loop repo):
@@ -206,13 +238,63 @@ These are hard-won lessons from 58+ ralph runs:
 - If input missing: STOP and report, never invent
 
 ### Model selection
-- Use `claude-opus-4-6` for AGENT_MODEL — do NOT upgrade to newer Opus versions without explicit user approval
+- Default `claude-opus-4-6` for AGENT_MODEL — do NOT silently upgrade.
+- EXCEPTION: when the user explicitly asks (e.g. "use opus-4-8 for graphics"),
+  set the model they named in the config and note it. The user's instruction
+  in the session always wins over this default.
 
-### Concurrency safety
-- Shared files (main.tex, supplemental_information.tex, references.bib): Edit tool ONLY, never Write
-- Re-read immediately before each edit
-- Use narrow unique `old_string` context so edits fail-safe if another agent modified the file
-- When tasks edit the same file, run them SERIALLY (not parallel) or accept merge conflicts
+### Concurrency safety — and how `integrate` ACTUALLY works
+- Shared files (main.tex, supplemental_information.tex, references.bib): Edit
+  tool ONLY, never Write. Re-read immediately before each edit. Use narrow
+  unique `old_string` context so edits fail-safe.
+- **CRITICAL — the integrate phase merges ALL branches in ONE pass.** A single
+  `bash ralph.sh integrate` builds `merge_order = (all analysis tasks + all
+  writing tasks)` and merges every worker branch sequentially into main. So if
+  TWO tasks both edited `supplemental_information.tex` (even different lines)
+  and you call `integrate` once at the end, git raises add/add conflicts and
+  the orchestrator bails with "No resolver script found" — the work is stranded
+  on the worker branches and never reaches main. This bit a real session.
+- **To genuinely serialize same-file tasks, INTERLEAVE per task** — do NOT just
+  split the analysis waves and integrate once at the end:
+  ```bash
+  ralph.sh preflight                       # baseline tag, ONCE
+  ANALYSIS_TASKS_STR="1" ralph.sh analysis # task 1 only
+  ANALYSIS_TASKS_STR="1" ralph.sh integrate# merge task 1 on a clean tree
+  ANALYSIS_TASKS_STR="2" ralph.sh analysis # task 2 only
+  ANALYSIS_TASKS_STR="2" ralph.sh integrate# merge task 2 on a clean tree
+  ralph.sh verify
+  ```
+  The generated `ralphNN_run.sh` (see §8) should encode exactly this interleave
+  when same-file conflict risk exists — that is the whole point of the launcher.
+- `analysis`/`integrate`/`verify` phases do NOT re-run preflight, so calling
+  preflight once up front is safe and wave 1's merge survives into wave 2.
+
+### Recovering a failed integrate (stranded branches)
+If integrate conflicted and left work on `ralphNN/taskN` branches:
+1. `git status` — confirm main is clean (no half-merge); the work is safe on
+   the branches, not lost.
+2. Merge branches ONE AT A TIME: `git merge --no-ff ralphNN/task1`, resolve,
+   then `ralphNN/task2`. For two figures editing different `\includegraphics`
+   lines the `.tex` merges cleanly; for the binary PDF, just recompile fresh
+   (`tectonic ...`) and `git add` the rebuilt PDF to resolve.
+3. Untracked `ralphNN_activity.md` / `_run.sh` in the tree can block a merge
+   ("would be overwritten") — move them aside, merge, restore.
+
+### Visual / figure-task verification (MANDATORY for any figure work)
+A figure fix is NOT done until you have SEEN it fixed. Summary text lies.
+- Regenerate the figure, then render the PDF to PNG: `pdftoppm -png -r 220
+  <fig>.pdf <out>`, and **Read the PNG**.
+- For dense multi-panel figures, the full-figure render is too small to judge —
+  **crop to the affected panel/region** (PIL) and Read that. Today a legend
+  overlap survived TWO "fixed" claims because it was judged from a shrunk
+  full-figure thumbnail. Crop and zoom.
+- Iterate: if the render still shows the defect, adjust and re-render. Only set
+  `passes:true` after the cropped, high-res view confirms the fix AND nothing
+  else regressed.
+- After all figure edits: update the `\includegraphics` filename, recompile the
+  document, and open ONLY the final compiled PDF (e.g.
+  `supplemental_information.pdf`) — not each standalone figure file, unless the
+  user asks. "Push through to the compiled artifact, then open that."
 
 ### HPC rules
 - All compute via SLURM `.sbatch` submitted with `sbatch` — NEVER `srun`
@@ -242,27 +324,46 @@ Help the user create a new ralph mission:
 
 ### `status`
 Check the current state:
-1. Find the most recent `ralph*_plan.md` and report task completion
-2. Check for active worktrees (`git worktree list`)
-3. Check for uncommitted changes
-4. Report any pending conflicts
+1. Find the most recent `ralph*_plan.md` and report task completion (count
+   `passes:true` / total).
+2. Check for active worktrees (`git worktree list`) and leftover worker
+   branches (`git branch | grep ralphNN/`) — leftover branches with commits
+   mean a previous integrate FAILED and work is stranded (see §5 recovery).
+3. Check for uncommitted changes and `ralphNN_logs/pending_conflicts_*.txt`.
+4. Report any pending conflicts and whether main is clean.
 
 ### `run` (if user asks to execute)
-The user runs ralph.sh from the terminal — do NOT attempt to run it from within Claude Code (it would spawn nested Claude instances). Instead:
-1. Verify the config and plan files are ready
-2. Print the exact commands the user should run
-3. Offer to watch logs if they want
+The user runs the loop from the terminal — do NOT run it from within Claude Code
+(it would spawn nested Claude instances). Instead:
+1. Verify the config, plan, and `ralphNN_run.sh` launcher exist.
+2. Print ONE command: `./ralphNN_run.sh` (the launcher hides the orchestrator
+   path and encodes any required serialization). Do not hand over a multi-line
+   staged sequence as the default.
+3. Offer to watch logs / help resolve conflicts if integrate fails.
 
 ---
 
 ## 7. KEY REFERENCES
 
-| Item | Location |
+**Locations drift after repo re-orgs — ALWAYS `find` before assuming.** In this
+project the orchestrator and guides were swept into `archive/` and are NOT in
+project root. Do not trust a hardcoded path; search first.
+
+| Item | Where to look (search, don't assume) |
 |------|----------|
 | Framework repo | `https://github.com/olympus-terminal/worktree-agent-loop` |
-| Ralph orchestrator | `ralph.sh` in project root (or install from framework repo) |
-| Mission configs | `ralph*_config.sh` in project root |
-| Original methodology | Search for `RALPH_WIGGUM_MASTER_GUIDE.md` or `RALPH_original_guide_huntley.txt` in the project |
+| Ralph orchestrator | `find <project> -name ralph.sh` — commonly `archive/ralph_configs/ralph.sh`, NOT project root after a re-org |
+| Active mission files | project root while a mission runs (`ralphNN_*`) |
+| Archived missions | `archive/ralph_configs/` — completed configs/plans/PRDs/prompts land here |
+| Mission outputs (committed) | `source_data/ralphNN/` |
+| Run logs | `archive/ralph_loops_archive/` and/or `ralphNN_logs/` |
+| Master guide | `archive/ralph_configs/RALPH_WIGGUM_MASTER_GUIDE.md` (canonical copy) |
+| Huntley's original | `saved_logs/RALPH_original_guide_huntley.txt` |
+
+These files are gitignored as session-specific working files (pattern
+`ralph*_{plan,PRD,PROMPT}.md`, `ralph*_config.sh`, `ralph*_run.sh`,
+`ralph*_activity.md`). Figure PDFs/SVGs under `figures/` are often gitignored
+too — use `git add -f` to track a regenerated figure the manuscript references.
 
 ---
 
@@ -270,14 +371,46 @@ The user runs ralph.sh from the terminal — do NOT attempt to run it from withi
 
 When asked to set up a new ralph loop, follow this checklist:
 
-1. **Determine next number**: scan `ralph*_config.sh` for highest N, use N+1
+0. **Orient first — find the highest mission number across ALL homes, not just
+   root.** Completed missions get archived, so scanning root configs alone
+   UNDERCOUNTS and you'll reuse a number. Check every home:
+   ```bash
+   ls ralph*_config.sh archive/ralph_configs/ralph*_config.sh \
+      archive/ralph_configs/ralph*_plan.md source_data/ralph* 2>/dev/null \
+      | grep -oE 'ralph[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1
+   ```
+   If unsure whether recent missions ran, ASK the user ("last I see is ralphNN —
+   is that right?") rather than guessing. A real session reused a number because
+   it only saw a stray plan file in root.
+1. **Determine next number**: highest N found in step 0, use N+1.
 2. **Create plan** (`ralphNN_plan.md`): JSON array with task objects
 3. **Create PRD** (`ralphNN_PRD.md`): requirements, context, what's in/out of scope
 4. **Create prompt** (`ralphNN_PROMPT.md`): agent instructions with all guards
 5. **Create activity** (`ralphNN_activity.md`): empty log with header
 6. **Create config** (`ralphNN_config.sh`): mission parameters
-7. **Validate**: check ralph.sh exists, plan is valid JSON, required tools listed
-8. **Print run commands**: staged execution sequence for the user
+7. **Locate the orchestrator**: `ralph.sh` may NOT be in project root after a
+   re-org — search the project (commonly `archive/ralph_configs/ralph.sh`).
+   Find it ONCE here so the launcher can hardcode the path.
+8. **Create launcher** (`ralphNN_run.sh`): a thin one-shot wrapper that resolves
+   the orchestrator + config relative to itself and `exec`s `ralph.sh ${1:-all}`.
+   `chmod +x` it. This is the user's single entry point — ALWAYS generate it.
+9. **gitignore hygiene**: ensure `ralph*_run.sh` (and the other `ralph*_*`
+   working files) are gitignored — they are session-specific, not source.
+10. **Validate**: orchestrator found, plan is valid JSON, required tools listed,
+    launcher passes `bash -n`.
+11. **Print ONE run command**: `./ralphNN_run.sh`. Not a staged sequence —
+    one shot is the default (see §Execution). Mention the staged escape hatch
+    only if shared-file merge risk warrants it.
+
+The `ralphNN_run.sh` template:
+```bash
+#!/bin/bash
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ORCH="${HERE}/<path-to>/ralph.sh"     # resolved in step 7
+CONFIG="${HERE}/ralphNN_config.sh"
+exec bash "$ORCH" "${1:-all}" "$CONFIG"
+```
 
 ### Task dependency planning:
 - Tasks that touch DIFFERENT files: safe to parallelize

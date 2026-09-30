@@ -16,7 +16,7 @@ You are preparing a scientific repository to accompany a peer-reviewed manuscrip
 
 ## Audit Passes
 
-Execute four passes across ALL repositories. Each pass produces a findings list before any edits are made.
+Execute five passes across ALL repositories. Each pass produces a findings list before any edits are made.
 
 ### Pass 1: Work-in-Progress Language
 
@@ -67,7 +67,81 @@ Check that each repository meets minimum standards for a publication companion:
 - **Cross-references:** GitHub README should link to HuggingFace (and vice versa) if both exist. Same for Zenodo DOI badges.
 - **No empty directories or placeholder files:** Remove any `__init__.py` that exists only to hold a directory, `.gitkeep` files in directories that now have content, or empty stub files.
 
-### Pass 4: Code Hygiene
+### Pass 4: Deposit Sizing & Compression
+
+Applies when the manuscript needs a DATA deposit, not just a code repo. The job
+is deciding what becomes an artifact — do this BEFORE promising anyone a size.
+
+**Never quote a size you have not measured.** Compression ratios vary by an
+order of magnitude across content types. Measure on a real sample of the actual
+data:
+
+```bash
+head -c 200000000 big_file.json | gzip -6 -c | wc -c   # ratio on a 200 MB sample
+du -sh <dir>                                            # true directory size
+ls -l --block-size=M <dir>/*.json                       # per-file, not just the ones you noticed
+```
+
+Typical measured ratios: verbose JSON/JSONL 6-10x, TSV/CSV 4-6x, FASTA 3-4x,
+already-compressed formats (`.gz`, `.bam`, `.faiss`, images) ~1x — never
+recompress these.
+
+**Platform limits (verify current values; these change):**
+
+| Platform | Limit |
+|---|---|
+| Zenodo | 50 GB per record default; higher on request |
+| Figshare | 20 GB per file |
+| Dryad | 300 GB per submission |
+| GitHub | 100 MB per file hard block; ~2 GB via LFS; repo should stay under a few GB |
+| HuggingFace | 50 GB per LFS file |
+
+**Decide what is IN the deposit.** A working directory is not a deposit. Exclude:
+
+- **Regenerable indices** — FAISS/vector stores, BLAST databases, `.bt2`/`.bwt`
+  indices, kmer tables. These are derived, enormous, and rebuildable from the
+  deposited inputs plus code.
+- **UI/browsing caches** — explorer trees, rendered site output, thumbnails.
+- **Session and attempt directories** — `session_*`, `*_attempt_NN/work/`,
+  scratch from interrupted runs.
+- **Intermediate variants of a frozen artifact** — if you deposit the frozen
+  `edges.json`, do not also ship `edges_scored.json`, `edges_normalized.json`,
+  `edges_hc.json` unless a claim depends on each.
+- **Anything under a redistribution restriction** — publisher-licensed full
+  text, controlled-access data. Deposit derived records and say so.
+
+Report the exclusions and the reason for each. A reviewer should be able to
+tell what was left out and why, not discover a gap.
+
+**Never deposit an artifact with a known defect.** If an index, table, or
+matrix has an unresolved bug logged anywhere in the project, it does not go in
+the deposit; note it in the README instead. Shipping a known-broken artifact is
+worse than omitting it.
+
+**Preserve original bytes for provenance.** Do not reformat a frozen artifact
+to make it more convenient (JSON -> JSONL, wide -> long) as the deposited copy.
+Deposit the exact frozen bytes, record a checksum, and describe the structure
+in the README. Ship a converted convenience copy ALONGSIDE the original if
+readers need one — never instead of it.
+
+**Package one `.tar.gz` per logical item**, numbered to continue the
+manuscript's existing supplementary scheme (if the paper cites Data S1-S8, the
+new deposit is S9, S10, ...). Record for each: uncompressed size, compressed
+size, SHA-256, file count, and the generating program. Verify the archive
+before upload:
+
+```bash
+tar -czf data_s9_<name>_<YYYYMMDD_HHMMSS>.tar.gz -C <parent> <items>
+tar -tzf data_s9_*.tar.gz | head          # readable?
+sha256sum data_s9_*.tar.gz                # record this
+```
+
+**Do not edit the manuscript's Data Availability statement until the DOI
+resolves.** A statement that honestly says an artifact has no accession is
+better than one promising a link that 404s. Update it only after the deposit is
+live and you have fetched the DOI.
+
+### Pass 5: Code Hygiene
 
 Scan source files for issues that signal an unfinished codebase:
 
@@ -79,7 +153,7 @@ Scan source files for issues that signal an unfinished codebase:
 
 ## Execution
 
-After all four passes are complete, present the full findings list to the user organized by repository and pass. Then ask for confirmation before making changes.
+After all five passes are complete, present the full findings list to the user organized by repository and pass. Then ask for confirmation before making changes.
 
 When making changes:
 - Edit files to fix all identified issues.
@@ -104,6 +178,12 @@ After all changes are pushed, run through this checklist and report status:
 [ ] Reproduction instructions are present and reference actual files that exist
 [ ] No credentials, secrets, or .env files committed
 [ ] No AI tool configuration directories (.claude/, .copilot/, etc.) committed
+[ ] Every deposit size was MEASURED (sampled gzip ratio), not estimated
+[ ] Regenerable indices, caches, session dirs excluded from deposits, with reasons stated
+[ ] No artifact with a known unresolved defect included in any deposit
+[ ] Frozen artifacts deposited as original bytes + checksum, not reformatted
+[ ] Deposit numbering continues the manuscript's supplementary scheme
+[ ] Data Availability statement updated ONLY after the DOI resolves
 [ ] HuggingFace model card YAML frontmatter is complete
 ```
 

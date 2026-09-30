@@ -15,17 +15,34 @@ The flagship pipeline of `gpu-tts-toolkit` is `media_to_tts.py` — a single too
 
 Locate the pipeline in this order and use the first that exists:
 
-1. `/media/drn2/External/working-tts-gpu/media_to_tts.py`
-2. `/home/drn2/Documents/working-tts-gpu/gpu-tts-toolkit/media_to_tts.py`
-3. `/media/drn2/External/working-tts-gpu/manuscript_to_tts_20260408_104500.py` *(legacy dated fallback)*
-4. `/home/drn2/Documents/working-tts-gpu/gpu-tts-toolkit/manuscript_to_tts.py` *(pre-rename fallback)*
+1. `/media/drn2/External/working-tts-gpu/gpu-tts-toolkit/media_to_tts.py`  *(canonical — self-consistent with its sibling deep_voice_tts*.py)*
+2. `/media/drn2/External/working-tts-gpu/media_to_tts.py`
+3. `/home/drn2/Documents/working-tts-gpu/gpu-tts-toolkit/media_to_tts.py`
+4. `/media/drn2/External/working-tts-gpu/manuscript_to_tts_20260408_104500.py` *(legacy dated fallback)*
+5. `/home/drn2/Documents/working-tts-gpu/gpu-tts-toolkit/manuscript_to_tts.py` *(pre-rename fallback)*
 
 If none exist, abort with:
 ```
 ERROR: media_to_tts.py not found. Clone https://github.com/olympus-terminal/gpu-tts-toolkit first.
 ```
 
-Bind the path to `$SCRIPT` for the rest of this command.
+Bind the path to `$SCRIPT` and its directory to `$SCRIPT_DIR` for the rest of this command.
+
+### REQUIRED: conda env + PATH
+
+Synthesis delegates to `deep_voice_tts*.py`, which imports the Coqui `TTS` package.
+That package is ONLY installed in the **`tts-app`** conda env — the base python and
+other envs do NOT have it (you will get `ModuleNotFoundError: No module named 'TTS'`).
+You must (a) run the pipeline with the tts-app python, and (b) put `$SCRIPT_DIR` on
+PATH so the pipeline finds its `deep_voice_tts*.py` sibling.
+
+```bash
+PY=/home/drn2/miniconda3/envs/tts-app/bin/python    # has TTS 0.22.0 + torch+cuda
+export PATH="$SCRIPT_DIR:$PATH"
+```
+
+Verify before synthesis: `"$PY" -c "import TTS, torch; print(TTS.__version__, torch.cuda.is_available())"`.
+Use `"$PY"` (NOT bare `python3`) for every pipeline invocation below.
 
 ---
 
@@ -100,10 +117,11 @@ Derive a spoken title: `curl -sSL "$URL" | grep -oP '(?<=<title>).*?(?=</title>)
 
 ## 6. Single-file mode
 
-For exactly one resolved input, run:
+For exactly one resolved input, run (note: a single `.txt`/`.md` must use `--multi`
+— the positional `input` only accepts `.pdf`/`.tex`):
 
 ```bash
-python3 "$SCRIPT" "$INPUT" \
+"$PY" "$SCRIPT" "$INPUT" \
     --voice "$VOICE" --format "$FMT" --screen
 ```
 
@@ -114,7 +132,7 @@ python3 "$SCRIPT" "$INPUT" \
 For ≥2 resolved inputs, generate spoken headers (unless the user passed `--headers`), then:
 
 ```bash
-python3 "$SCRIPT" --multi "$F1" "$F2" ... \
+"$PY" "$SCRIPT" --multi "$F1" "$F2" ... \
     --headers "Part 1. ..." "Part 2. ..." ... \
     --voice "$VOICE" --format "$FMT" --screen
 ```
@@ -138,8 +156,8 @@ If the user did NOT supply `--headers`, derive one per file from the filename:
 Before calling the pipeline:
 
 1. **Word count** of each extracted/converted file. If any is `< 100` words, warn the user — probable extraction failure.
-2. **Required binaries**: `python3`, `pandoc`, `pdftotext`, `ffmpeg`. Missing → install hint + abort.
-3. **CUDA**: `python3 -c "import torch; print(torch.cuda.is_available())"`. If `False`, warn that synthesis will fall back to CPU (~10× slower) — the pipeline auto-detects device.
+2. **Required binaries**: `pandoc`, `pdftotext`, `ffmpeg` (+ the tts-app `$PY`). Missing → install hint + abort.
+3. **TTS env + CUDA**: `"$PY" -c "import TTS, torch; print(TTS.__version__, torch.cuda.is_available())"`. Must import `TTS` (only present in the tts-app env) and report CUDA. If `TTS` import fails, the wrong python is being used — fix `$PY`. If CUDA `False`, warn synthesis falls back to CPU (~10× slower).
 4. **Disk**: `df -BM /tmp` and output dir; require ≥500 MB free.
 
 ---
