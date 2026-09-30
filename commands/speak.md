@@ -53,16 +53,39 @@ The pipeline script `media_to_tts.py` accepts exactly these flags (do not invent
 | Flag | Meaning |
 |------|---------|
 | `input` (positional) | Single-file input (.tex or .pdf); omit if using `--multi` |
-| `-o / --output <path>` | Explicit output .txt path (default: auto-timestamped next to input) |
-| `--voice <id>` | Also synthesize audio with this voice (e.g. `p246`) |
+| `-o / --output <path>` | Explicit path for the extracted .txt (default: auto-timestamped next to input) |
+| `--voice <id>` | Voice (e.g. `p246`) |
 | `--format {mp3,wav}` | Audio format (default `mp3`) |
-| `--screen` | Enable pre- and post-synthesis hallucination screening |
-| `--screen-only <dir>` | Analyze an existing TTS output dir (no extraction) |
+| `--output-dir <dir>` | Where audio is written (default `processed/`, **relative to the current working directory**) |
+| `--screen` | Accepted for compatibility; screening is ON by default |
+| `--no-screen` | Disables both screens. **Never pass this from /speak.** |
+| `--text-only` | Extract and clean text only, no synthesis. Use this for extraction checks — without it, **every run synthesizes audio** (the engine defaults to coqui, with or without `--voice`) |
+| `--screen-only <dir>` | Legacy chunk-dir analysis (needs `--keep-intermediates` output); superseded by `verify_tts_audio.py` |
 | `--keep-intermediates` | Keep chunks/ dir and temp .txt after synthesis |
 | `--multi FILE [FILE …]` | Multi-file mode; accepts .txt .md .tex .pdf in order |
 | `--headers HEAD [HEAD …]` | Spoken headers, one per `--multi` file |
 
-Device (CPU/GPU) is auto-detected by `deep_voice_tts.py`; there is no `--device` flag. Chunk size is fixed inside the pipeline. Output directory is the parent of the input.
+Device (CPU/GPU) is auto-detected; there is no `--device` flag. Chunk size is fixed inside the pipeline. Run the pipeline from the directory where `processed/` should appear (normally the input's directory), or pass `--output-dir`.
+
+### Hallucination checks (both mandatory)
+
+1. **Pre-synthesis text screen** — pattern scan of the cleaned text (long bare numbers, residual LaTeX, dense number lists, repeated words). Saved as `processed/<stem>_text_screen.json`.
+2. **Post-synthesis ASR check** — `verify_tts_audio.py` (same directory as the pipeline) transcribes the final audio with faster-whisper medium (GPU; ~2 min per hour of audio), aligns it to the exact spoken text, and flags inserted speech, skipped text, looped phrases, long unrecognized gaps, and dropped minus signs ("minus 0.6" in the text, "0.6" in the audio). Every flagged window is re-transcribed with large-v3 and given a verdict:
+   - `cleared` — first-pass ASR miss; the expected text is audible
+   - `identifier_readout` — a hash / accession / ID in the text read out character by character (a text-content issue, not a TTS fault)
+   - `silence` — quiet audio
+   - `suspect` — possible hallucination or dropped text; **the post count**
+
+   Status is CLEAN when there are no `suspect` findings. Outputs next to the audio:
+   - `<stem>_spoken.txt` — the exact text sent to TTS (always kept)
+   - `<stem>_hallucination_report.json` — the verdict (`summary.status` CLEAN / REVIEW_NEEDED)
+   - `<stem>_asr_words.json.gz` — the raw transcript with word timestamps (re-analyze with `--transcript` without re-transcribing)
+
+   The pipeline runs it automatically and exits 0 (CLEAN), 2 (REVIEW_NEEDED) or 3 (audio produced but NOT verified). To check an existing audio file by hand:
+   ```bash
+   "$PY" "$SCRIPT_DIR/verify_tts_audio.py" AUDIO.mp3 AUDIO_spoken.txt
+   ```
+   If the spoken text was not kept (older runs), regenerate it deterministically with the same cleaner — e.g. `"$PY" -c "import sys; sys.path.insert(0,'$SCRIPT_DIR'); import media_to_tts as m; t,_=m.clean_multi_files([...],[...]); open('X_spoken.txt','w').write(t)"` — or `--text-only -o X_spoken.txt`.
 
 ## 3. Defaults for /speak
 
@@ -70,7 +93,7 @@ Device (CPU/GPU) is auto-detected by `deep_voice_tts.py`; there is no `--device`
 |---------|---------|
 | Voice   | `p246` (VCTK VITS, deep male, 0.90× speed) |
 | Format  | `mp3` |
-| Screen  | always on (`--screen`) |
+| Screen  | always on — pre-synthesis text screen + post-synthesis ASR check (never `--no-screen`) |
 | Cleanup | always on (do NOT pass `--keep-intermediates` unless user asks) |
 
 ---
@@ -166,16 +189,16 @@ Before calling the pipeline:
 
 After the pipeline returns:
 
-1. Resolve the output directory (the pipeline prints it; it looks like `<basename>_deep_voice_<stamp>/`).
-2. Check the `_complete.mp3` exists and is ≥ 100 KB.
-3. If `ffprobe` is available:
-   ```bash
-   ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 *.mp3
-   ```
-4. Parse `hallucination_report.json`:
-   - Count pre-synthesis `text_triggers`
-   - Count post-synthesis `audio_issues`
-5. Verify intermediate files were cleaned (no loose chunk `.wav` files, no temp `.txt`).
+1. Resolve the audio path from the pipeline's `✅ Complete! Output: processed/<stem>.mp3` line (relative to the directory the pipeline ran in).
+2. Check the MP3 exists and is ≥ 100 KB.
+3. Duration: `ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 <mp3>`
+4. **Hallucination gate — do not skip.** Both files must exist next to the MP3:
+   - `<stem>_text_screen.json` → `text_triggers` (pre count) and `by_pattern`
+   - `<stem>_hallucination_report.json` → `summary.suspect` (post count), `summary.status`, `summary.identifier_readout`, `summary.cleared`, `summary.text_words_recovered`
+
+   If the report is missing (pipeline exit code 3, crash, older pipeline, or a run made outside /speak), run `verify_tts_audio.py` yourself (see §2) before reporting. If it cannot run, the result is **NOT VERIFIED** — say so in the summary; never report post=0 for an unchecked file.
+5. If `status` is REVIEW_NEEDED: list every `suspect` finding with its timestamp, kind and the expected text, and offer to re-synthesize. Report `identifier_readout` findings separately as text-content items (hashes, accessions and IDs are better removed from narration text than re-synthesized).
+6. Verify intermediate files were cleaned (no loose chunk `.wav` files, no temp `.txt`); the `_spoken.txt`, `_text_screen.json`, `_hallucination_report.json` and `_asr_words.json.gz` files are evidence and stay.
 
 ---
 
@@ -189,10 +212,10 @@ Duration: <H:MM:SS>
 Size: <N.N MB>
 Chunks: <N>
 Voice: <voice_id> @ <speed>x
-Flags: pre=<N text triggers>, post=<N audio issues>
+Flags: pre=<N text triggers>, post=<N suspect> (<CLEAN|REVIEW_NEEDED|NOT VERIFIED>; <N> identifier read-outs, <N> cleared on recheck)
 ```
 
-Then, if any flags > 0, list the top 3 trigger categories with counts.
+Every value comes from the files in §9; `post` may never be filled from memory or assumed. Then, if any flags > 0, list the top 3 pre-synthesis trigger categories with counts and every post-synthesis finding with its timestamp.
 
 ---
 
@@ -200,7 +223,10 @@ Then, if any flags > 0, list the top 3 trigger categories with counts.
 
 - **Extraction returned empty** → report which cleaner failed and the file path; do not proceed to synthesis
 - **Synthesis OOM** → retry with a different (smaller) voice model, or reduce input by splitting into smaller `--multi` chunks
-- **Screening reports audio repetitions** → do not silently discard; surface count and offer to re-synthesize with a different voice
+- **ASR check reports loops, inserted speech or skipped text** → do not silently discard; list each with its timestamp and offer to re-synthesize (another voice, or rewrite the triggering sentence)
+- **ASR check could not run** (pipeline exit 3) → run `verify_tts_audio.py` by hand; if it still fails, report NOT VERIFIED
+- **Numbers missing from the spoken text** → compare a few figures in `<stem>_spoken.txt` against the source before synthesis; the PDF citation-number stripper must not run on `.tex`/`.md`/`.html` (fixed 2026-09-30)
+- **Signs dropped** (`sign` findings) → the voice skips a bare leading `-`; the cleaner writes signed values as "minus"/"plus" (fixed 2026-09-30). Any `sign` suspect is a content error: re-synthesize.
 - **Pandoc missing for a required format** → stop; suggest `sudo apt install pandoc`
 - **`input` positional only supports .pdf or .tex** → for .md/.txt single files, wrap them into `--multi` with a single entry (the single-file positional path rejects them)
 
@@ -224,9 +250,11 @@ Then, if any flags > 0, list the top 3 trigger categories with counts.
 1. Create a TodoWrite list of the concrete steps for the user's specific arguments.
 2. Run pre-flight checks in parallel where possible.
 3. Perform any pre-conversion in the scratch dir.
-4. Call the pipeline (single or multi).
-5. Run post-flight verification.
+4. Call the pipeline (single or multi) from the directory where `processed/` belongs; never pass `--no-screen`.
+5. Run post-flight verification, including the §9 hallucination gate (run `verify_tts_audio.py` by hand if its report is missing).
 6. Emit the 6-line summary.
 7. Clean up the scratch dir.
+
+A re-synthesis (e.g. after fixing extraction) is a new run: it gets its own text screen and ASR check, and the summary describes that run's files only.
 
 Now carry out the pipeline for `$ARGUMENTS`.
