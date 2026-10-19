@@ -14,6 +14,7 @@ claude-skills/
 ├── skills/                # Skill directories (→ ~/.claude/skills/)
 │   ├── caveman/           #   /caveman — toggle caveman-speak
 │   ├── multi-agent/       #   /multi-agent — parallel agent orchestration
+│   ├── p-merge/           #   /p-merge — co-working with parallel agents in one tree
 │   └── p-ralph/           #   /p-ralph — parallel Ralph Wiggum methodology
 ├── scripts/               # Supporting Python scripts
 ├── install.sh             # Symlink installer (--clone, --update, --uninstall)
@@ -104,6 +105,7 @@ Skills are richer than commands — they have their own directories with support
 |-------|-------------|
 | `/caveman` | Toggle caveman-speak mode. Prose goes caveman, code stays untouched. |
 | `/multi-agent` | Orchestrate 3-6 parallel agents for papers, projects, or research. Modes: `paper`, `project`, `research`, `custom`. |
+| `/p-merge` | Co-working in one tree while other agents commit in parallel: sync before editing, build on the newest version of shared files, stage only your own paths, report the merged state as fact. |
 | `/p-ralph` | Parallel Ralph Wiggum methodology — isolated git worktree agents for multi-task manuscript/project work. |
 
 ### `/multi-agent` details
