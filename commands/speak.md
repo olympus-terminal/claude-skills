@@ -1,11 +1,18 @@
 ---
 description: Extract salient text from any media and convert to TTS audio (MP3) with hallucination screening
-argument-hint: <file|url> [file2 ...] [--voice zv|p246] [--headers "H1" "H2" ...]
+argument-hint: [file|url] [file2 ...] (default: newest PDF in cwd) [--voice zv|p246] [--headers "H1" "H2" ...]
 ---
 
 You are now running the **/speak** pipeline. Goal: take any user-provided media (files, URLs, or mixed) and produce a single narrated MP3 via the gpu-tts-toolkit, with rigorous text extraction, hallucination screening, and intermediate cleanup.
 
 Parse `$ARGUMENTS` as whitespace-separated tokens. Any token starting with `--` is a flag; everything else is an input. URLs start with `http://` or `https://`.
+
+**No input given** (no arguments, or only flags): use the most recently added PDF in the current working directory, top level only (user, 2026-11-10). "Added" is the later of each file's modification and status-change times, so a file copied or moved in with an old mtime still counts:
+```bash
+find . -maxdepth 1 -type f -iname '*.pdf' -printf '%T@ %C@ %p\n' \
+  | awk '{t=($1>$2)?$1:$2; p=substr($0,length($1)+length($2)+3); print t"\t"p}' | sort -rn | head -1 | cut -f2-
+```
+State the chosen file (name, size, time) before going on. No PDF in the directory: stop and ask which file to narrate. A phrase such as "the latest pdf" means the same.
 
 ---
 
@@ -248,6 +255,7 @@ A job split across machines (§13) gives one 6-line summary per part, each from 
 - **Plain-text input loses numbers** → `PlainTextTTSCleaner` still runs the PDF citation-number stripper, which removes a 1–2-digit number between two lowercase words ("revealed 20 transcript programs" → "revealed transcript programs"). Write ad hoc narration text as `.md`; the Markdown cleaner skips the stripper.
 - **Qwen3 babbles on some gene symbols** → a mixed-case symbol in a legend title ("CrCO-biased") gave about 20 s of looping syllables and a repeated phrase. Rewrite such symbols in the narration copy (e.g. letter by letter) and re-synthesize the passage.
 - **Legends numbered by `\refstepcounter{figure}`** → `{\setlength{\parindent}{0pt}\refstepcounter{figure}…Figure~\thefigure.` is read as "0pt figure. Figure." and loses its number. Write the number into the narration copy ("Figure S4.").
+- **Two-column journal PDFs read across the columns** → for a Nature article (2026-11-10), pdftotext gave lines alternating between left and right column, plus figure-panel text, references and affiliations (106 text triggers). Read the `--text-only` output before synthesis. If it interleaves, build a narration copy from PyMuPDF spans: keep prose by font class (body, legends, headings), drop figure-internal fonts, 6 pt references and affiliations, and superscript citations (keep subscripts by baseline), order blocks left column then right, and place each figure legend after the paragraph it interrupts. Reference builder: `~/Documents/processed/speak_nature_20261110_181142/narration_source_20261110_181142.py` (triggers 106 → 1).
 - **Pandoc missing for a required format** → stop; suggest `sudo apt install pandoc`
 - **`input` positional only supports .pdf or .tex** → for .md/.txt single files, wrap them into `--multi` with a single entry (the single-file positional path rejects them)
 
