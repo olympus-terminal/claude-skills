@@ -82,11 +82,19 @@ Commands are symlinked into `~/.claude/commands/`, skills into `~/.claude/skills
 |---------|-------------|
 | `/artist` | Publication-quality figure mode (matplotlib, TikZ, seaborn, SVG). Enforces 6pt Arial, project palettes, programmatic overlap detection, and a mandatory render-check-fix iteration loop. |
 
+### Creative Series (established prompts only)
+
+| Command | Description |
+|---------|-------------|
+| `/bio-noir-scenery` | Midjourney 32:9 bio-noir scenery prompts |
+| `/suno-luminous-focus` | Suno instrumental ambient-focus prompt sets |
+
 ### Scientific Writing & Review
 
 | Command | Description |
 |---------|-------------|
 | `/science-writing` | Line-edit prose for high-impact journals (Nature, Cell, eLife) |
+| `/cover` | Draft, revise, and audit cover letters for scientific journal submissions |
 | `/reviewer` | In silico manuscript reviewer in David R. Nelson's voice |
 | `/repo` | Audit repos for publication readiness (GitHub, HuggingFace, Zenodo) |
 | `/speak` | Extract text from media and convert to TTS audio (MP3) |

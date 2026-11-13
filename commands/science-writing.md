@@ -244,7 +244,7 @@ Single: These results suggest X is associated with Y.
 Direct: X is associated with Y.
 ```
 
-The choice of rung depends on section 5 (claim calibration), not on which sounds safest.
+The choice of verb depends on section 5 (claim calibration), not on which sounds safest.
 
 ### 3e. Filler phrases
 
@@ -403,7 +403,7 @@ Separate observation from interpretation. Observations go in Results. Interpreta
 
 ### 5a. Flagging unsupported claims
 
-When a claim is stated at a rung higher than the evidence supports, do not rewrite it silently. Flag it for the author in the Pass 2 draft. Use these tags:
+When a claim is stated more strongly than the evidence supports, do not rewrite it silently. Flag it for the author in the Pass 2 draft. Use these tags:
 
 ```text
 [CLAIM UNSUPPORTED -- need: effect size and direction, n, significance test]
@@ -1027,6 +1027,51 @@ Two habits worth keeping:
 - After editing, confirm both the backslash-count guard (Section 8 Step 8) and a
   clean build. They catch different faults: the count catches lost markup, the
   build catches malformed markup.
+
+## 11e. Full-page figures whose legends overflow the page
+
+A LaTeX float cannot break across pages. When a full-width figure plus its
+legend is taller than the text block, the legend prints through the page number
+and off the page. The log says so: `LaTeX Warning: Float too large for page by
+NNpt`. Treat that warning as a defect, not noise.
+
+**Fix: typeset the figure in the text flow so the legend can spill.** Replace the
+`figure` float with an image block followed by an ordinary footnote-size
+paragraph. The legend then fills the page down to the bottom of the text block
+and continues on the next page; numbering and `\ref` labels are unchanged.
+
+```latex
+\clearpage
+\begin{center}
+\includegraphics[width=\textwidth]{figures/fig_example.pdf}
+\end{center}
+{\footnotesize\setlength{\parindent}{0pt}\refstepcounter{figure}\label{fig:example}%
+Figure~\thefigure: \textbf{Title.} Legend text \ldots\par}
+\bigskip
+```
+
+Keep the caption package's label format (e.g. "Figure 1:") so in-flow and
+floating figures look identical. Fragile commands such as `\path{}` do not
+belong in captions; use `\texttt{}` with escaped underscores.
+
+**Spill point: about one line above the page number.** The gap between the
+bottom of the text block and the page-number baseline is `footskip`. Set it to
+roughly one body line while keeping the page number in place, e.g.
+
+```latex
+% before: bottom=1.2in, footskip=0.5in  (gap ~3 lines)
+\usepackage[letterpaper, left=0.75in, right=0.75in, top=0.5in,
+            bottom=0.95in, footskip=0.25in]{geometry}   % gap ~1 line
+```
+
+(Page-number position = bottom - footskip; hold it constant when you change them.)
+
+**Verify against the current build, not a stale log.** With
+`tectonic -X compile main.tex --keep-intermediates`, `main.log` may not be
+refreshed on every run; check its timestamp against `main.pdf`. Capture the build
+output (`> build_<ts>.log 2>&1`) and grep that for `Float too large`,
+`undefined`, and `error`, and grep the PDF text (`pdftotext main.pdf - | grep '??'`)
+for unresolved references. Then render the affected pages and look at them.
 
 ## 12. Interaction with other commands
 
