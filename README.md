@@ -11,6 +11,8 @@ A collection of custom Claude Code [Anthropic] commands and skills for enhanced 
 ```
 claude-skills/
 ├── commands/              # Slash commands (.md files → ~/.claude/commands/)
+├── mac/commands/          # macOS-only versions; override commands/ of the same name on a Mac
+├── linux/commands/        # Linux-only versions (create when needed); override commands/ on Linux
 ├── skills/                # Skill directories (→ ~/.claude/skills/)
 │   ├── caveman/           #   /caveman — toggle caveman-speak
 │   ├── multi-agent/       #   /multi-agent — parallel agent orchestration
@@ -35,6 +37,12 @@ claude-skills/
 ```
 
 Commands are symlinked into `~/.claude/commands/`, skills into `~/.claude/skills/`. Existing files are backed up before replacement.
+
+### Per-machine versions (Mac and Linux)
+
+When the Mac and the Linux box need different versions of one command, keep each in its own folder: `mac/commands/<name>.md` and `linux/commands/<name>.md`. `install.sh` detects the platform and links that file instead of the shared `commands/<name>.md`; a file that exists only in a platform folder is installed on that platform alone. Edit and commit the copy for the machine you are on. Because the two machines never write to the same file, pulling or resetting to `origin/main` cannot replace one machine's version with the other's.
+
+Currently overridden on macOS: `/reviewer` (Comments and Suggestions for Authors, 650-word cap) and `/screenshot`.
 
 ## Available Commands
 

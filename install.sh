@@ -11,6 +11,10 @@
 #   - Preserves local-only files (e.g. export_session.py) untouched.
 #   - Supports bootstrap from scratch on a new machine via `--clone`.
 #   - Supports `--update` to fast-forward the repo and re-link any new items.
+#   - Per-platform overrides: a file in mac/commands/ (macOS) or
+#     linux/commands/ (Linux) is linked instead of the shared commands/ file
+#     of the same name on that platform only. Each machine edits and commits
+#     its own copy, so a sync never overwrites the other machine's version.
 #
 # Usage:
 #   ./install.sh                  # link this checkout into ~/.claude/
@@ -23,6 +27,7 @@
 #   REPO_DIR      Where the repo lives (default: $HOME/Documents/claude-skills)
 #   CLAUDE_HOME   Claude Code user dir  (default: $HOME/.claude)
 #   REMOTE        GitHub URL for --clone (default: git@github.com:olympus-terminal/claude-skills.git)
+#   PLATFORM      Override directory to use: mac or linux (default: from uname)
 
 set -euo pipefail
 
@@ -31,6 +36,13 @@ CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
 REMOTE="${REMOTE:-git@github.com:olympus-terminal/claude-skills.git}"
 CMD_TARGET="$CLAUDE_HOME/commands"
 SKILL_TARGET="$CLAUDE_HOME/skills"
+if [ -z "${PLATFORM:-}" ]; then
+    case "$(uname -s)" in
+        Darwin) PLATFORM=mac ;;
+        Linux)  PLATFORM=linux ;;
+        *)      PLATFORM="" ;;
+    esac
+fi
 DRY=0
 ACTION=install
 
@@ -118,11 +130,23 @@ link_commands() {
     local stamp
     stamp="$(date +%Y%m%d-%H%M%S)"
 
+    # Platform override directory (mac/commands or linux/commands), if any.
+    local override_dir=""
+    if [ -n "$PLATFORM" ] && [ -d "$REPO_DIR/$PLATFORM/commands" ]; then
+        override_dir="$REPO_DIR/$PLATFORM/commands"
+        echo "Platform overrides: $override_dir"
+    fi
+
     shopt -s nullglob
     for src in "$REPO_DIR/commands/"*.md; do
         local name
         name="$(basename "$src")"
         local dst="$CMD_TARGET/$name"
+
+        # This platform's own version of the command wins over the shared one.
+        if [ -n "$override_dir" ] && [ -f "$override_dir/$name" ]; then
+            src="$override_dir/$name"
+        fi
 
         link_file "$src" "$dst" "$stamp" || true
         local rc=$?
@@ -133,6 +157,25 @@ link_commands() {
             3) backed_up=$((backed_up + 1)); installed=$((installed + 1)) ;;
         esac
     done
+
+    # Commands that exist only for this platform (no shared file of that name).
+    if [ -n "$override_dir" ]; then
+        for src in "$override_dir/"*.md; do
+            local name
+            name="$(basename "$src")"
+            [ -f "$REPO_DIR/commands/$name" ] && continue
+            local dst="$CMD_TARGET/$name"
+
+            link_file "$src" "$dst" "$stamp" || true
+            local rc=$?
+            case $rc in
+                0) installed=$((installed + 1)) ;;
+                1) skipped=$((skipped + 1)) ;;
+                2) relinked=$((relinked + 1)) ;;
+                3) backed_up=$((backed_up + 1)); installed=$((installed + 1)) ;;
+            esac
+        done
+    fi
     shopt -u nullglob
 
     # Also link supporting scripts into the commands dir
@@ -224,7 +267,7 @@ do_uninstall() {
             local tgt
             tgt="$(readlink "$l")"
             case "$tgt" in
-                "$REPO_DIR"/commands/*|"$REPO_DIR"/scripts/*)
+                "$REPO_DIR"/commands/*|"$REPO_DIR"/scripts/*|"$REPO_DIR"/mac/commands/*|"$REPO_DIR"/linux/commands/*)
                     run rm "$l"
                     removed=$((removed + 1))
                     ;;
